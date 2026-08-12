@@ -41,13 +41,15 @@ CS3223-SimpleDB-Project/SimpleDBClients
 Do not create another nested `SimpleDBClients` folder.
 
 The file `.vscode/settings.json` configures `src` as the source folder, `bin`
-as the output folder, and `../SimpleDBEngine/bin` as a referenced library. This
-allows the client code to resolve classes from the SimpleDBEngine.
+as the output folder, and JAR files under `lib` as referenced libraries. The
+SimpleDBEngine build task creates `lib/simpledb-engine.jar`, allowing the client
+code and VS Code IntelliSense to resolve classes from the engine.
 
 ## Compile the projects
 
 Compile `SimpleDBEngine` before compiling the clients. From the
 `SimpleDBEngine` folder, press `Ctrl+Shift+B` and run **Compile SimpleDBEngine**.
+This also copies the generated engine JAR to `SimpleDBClients/lib`.
 
 Then, from the `SimpleDBClients` folder, press `Ctrl+Shift+B` and run
 **Compile SimpleDBClients**. The task is defined in `.vscode/tasks.json`. It

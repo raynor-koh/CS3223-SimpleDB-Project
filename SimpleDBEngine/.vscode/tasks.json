@@ -9,14 +9,14 @@
                 "args": [
                     "-NoProfile",
                     "-Command",
-                    "$files = Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName }; New-Item -ItemType Directory -Force bin | Out-Null; javac -d bin $files"
+                    "$files = Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName }; New-Item -ItemType Directory -Force bin,lib,../SimpleDBClients/lib | Out-Null; javac -d bin $files; jar --create --file lib/simpledb-engine.jar -C bin .; Copy-Item -Force lib/simpledb-engine.jar ../SimpleDBClients/lib/simpledb-engine.jar"
                 ]
             },
             "linux": {
-                "command": "mkdir -p bin && find src -name '*.java' -print0 | xargs -0 javac -d bin"
+                "command": "mkdir -p bin lib ../SimpleDBClients/lib && find src -name '*.java' -print0 | xargs -0 javac -d bin && jar --create --file lib/simpledb-engine.jar -C bin . && cp lib/simpledb-engine.jar ../SimpleDBClients/lib/simpledb-engine.jar"
             },
             "osx": {
-                "command": "mkdir -p bin && find src -name '*.java' -print0 | xargs -0 javac -d bin"
+                "command": "mkdir -p bin lib ../SimpleDBClients/lib && find src -name '*.java' -print0 | xargs -0 javac -d bin && jar --create --file lib/simpledb-engine.jar -C bin . && cp lib/simpledb-engine.jar ../SimpleDBClients/lib/simpledb-engine.jar"
             },
             "group": {
                 "kind": "build",
