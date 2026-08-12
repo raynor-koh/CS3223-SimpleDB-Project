@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compile SimpleDBEngine",
+            "type": "shell",
+            "windows": {
+                "command": "powershell",
+                "args": [
+                    "-NoProfile",
+                    "-Command",
+                    "$files = Get-ChildItem -Recurse -Filter *.java src | ForEach-Object { $_.FullName }; New-Item -ItemType Directory -Force bin | Out-Null; javac -d bin $files"
+                ]
+            },
+            "linux": {
+                "command": "mkdir -p bin && find src -name '*.java' -print0 | xargs -0 javac -d bin"
+            },
+            "osx": {
+                "command": "mkdir -p bin && find src -name '*.java' -print0 | xargs -0 javac -d bin"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$javac"
+            ]
+        }
+    ]
+}
