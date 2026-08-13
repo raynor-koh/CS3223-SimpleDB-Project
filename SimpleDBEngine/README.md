@@ -42,7 +42,9 @@ Do not open only the parent folder or create another nested `SimpleDBEngine`
 folder.
 
 The file `.vscode/settings.json` configures `src` as the source folder and `bin`
-as the compilation output folder.
+as the compilation output folder. The source code includes the engine packages
+under `src/simpledb` and the direct-use student database tests under
+`src/simpledb/test`.
 
 ## Compile the project
 
@@ -94,3 +96,75 @@ the `bin` folder.
 Compilation warnings, such as warnings about deprecated Java APIs, do not stop
 the build. Red compiler errors must be fixed before the affected classes can be
 used.
+
+## Run the SimpleDB server
+
+The project includes a launch configuration named **SimpleDB Server** in
+`.vscode/launch.json`. It runs `simpledb.server.StartServer` using the
+`studentdb` database by default.
+
+1. Open the **Run and Debug** view in VS Code.
+2. Select **SimpleDB Server**.
+3. Press `F5`.
+
+The server prints `database server ready` when it is running and listens on RMI
+port `1099`. Stop it with **Shift+F5**. The server database is created in the
+current working directory, normally:
+
+```text
+SimpleDBEngine/studentdb/
+```
+
+To use a different database name, set the launch configuration's `args` field,
+for example:
+
+```json
+"args": ["mydatabase"]
+```
+
+## Run the direct SimpleDB tests
+
+The programs under `src/simpledb/test` access the engine classes directly and
+do not require the server. Run them from the `SimpleDBEngine` project using the
+**Run** link above each class's `main` method, or by selecting the class in the
+**Run and Debug** view.
+
+Run `CreateStudentDB` once to create the database, then run:
+
+```text
+simpledb.test.CreateStudentDB
+simpledb.test.StudentMajor
+simpledb.test.ChangeMajor
+simpledb.test.FindMajors
+```
+
+`FindMajors` prompts for a department name such as `compsci`, `math`, or
+`drama`. Do not run `CreateStudentDB` repeatedly against the same database. If
+the database becomes corrupted or needs to be recreated, stop any running
+program, delete `SimpleDBEngine/studentdb/`, and run `CreateStudentDB` again.
+
+### Run the direct SimpleIJ
+
+`simpledb.test.SimpleIJ` is an interactive SQL client that accesses the
+SimpleDB classes directly. Unlike the client-project version, it does not ask
+for a JDBC connection string and does not require the server.
+
+Run it from the `SimpleDBEngine` project using the **Run** link above its
+`main` method. It uses the local `studentdb` database and displays an `SQL>`
+prompt. For example:
+
+```text
+SQL> select SName, DName from DEPT, STUDENT where MajorId = DId
+SQL> exit
+```
+
+Run `simpledb.test.CreateStudentDB` first if `studentdb` has not been created.
+The direct `SimpleIJ` database is located at:
+
+```text
+SimpleDBEngine/studentdb/
+```
+
+The direct `SimpleIJ` and the network server use separate database instances
+when they run from different project directories, even if both databases are
+named `studentdb`.

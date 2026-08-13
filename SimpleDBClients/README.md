@@ -28,7 +28,9 @@ SimpleDBClients/
 └── .vscode/   VS Code project settings and tasks
 ```
 
-The client source code is under `src/simpleclient`.
+The client source code is under `src`, organized into the `embedded` and
+`network` packages. Embedded clients use a local database; network clients
+connect to a running SimpleDB server.
 
 ## Open the project
 
@@ -80,3 +82,72 @@ classes. The `-d bin` option places the compiled client classes in `bin`.
 
 Compilation warnings do not stop the build. Red compiler errors must be fixed
 before the affected client classes can be used.
+
+## Run the embedded clients
+
+Embedded clients connect directly to a local database and do not require the
+SimpleDB server. Run them from the `SimpleDBClients` project using the **Run**
+link above each class's `main` method:
+
+```text
+embedded.CreateStudentDB
+embedded.StudentMajor
+embedded.ChangeMajor
+embedded.FindMajors
+```
+
+The embedded clients use the `studentdb` database in their current working
+directory. Run `embedded.CreateStudentDB` once before the other clients. Do not
+rerun it against an existing database; delete the database directory first if
+you need to recreate it.
+
+## Run the network clients
+
+Network clients connect to `jdbc:simpledb://localhost`, so the SimpleDB server
+must be running first.
+
+1. Open `SimpleDBEngine` in VS Code.
+2. Start **SimpleDB Server** from **Run and Debug**.
+3. Open `SimpleDBClients`.
+4. Compile the clients if necessary.
+5. Run the clients in this order:
+
+   ```text
+   network.CreateStudentDB
+   network.StudentMajor
+   network.ChangeMajor
+   network.FindMajors
+   ```
+
+`network.FindMajors` prompts for a department name such as `drama`. If the
+server is stopped, the network clients will report a connection error. Restart
+the server before running them again. The network database is separate from the
+embedded database, even though both are normally named `studentdb`.
+
+## Run SimpleIJ
+
+`SimpleIJ` is an interactive JDBC client. Run it from the `SimpleDBClients`
+project using the **Run** link above its `main` method. It first prompts for a
+connection string and then accepts SQL commands.
+
+For the embedded database, enter:
+
+```text
+jdbc:simpledb:studentdb
+```
+
+For the network database, start the **SimpleDB Server** first, then enter:
+
+```text
+jdbc:simpledb://localhost
+```
+
+At the `SQL>` prompt, enter SQL statements such as:
+
+```sql
+select SName, DName from DEPT, STUDENT where MajorId = DId
+```
+
+Enter `exit` to close the client. The embedded connection uses the database in
+the client's current working directory, while the network connection uses the
+database managed by the running server.
