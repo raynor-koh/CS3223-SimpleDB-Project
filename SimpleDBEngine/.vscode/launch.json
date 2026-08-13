@@ -1,0 +1,13 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "SimpleDB Server",
+            "request": "launch",
+            "mainClass": "simpledb.server.StartServer",
+            "cwd": "${workspaceFolder}",
+            "args": []
+        }
+    ]
+}
