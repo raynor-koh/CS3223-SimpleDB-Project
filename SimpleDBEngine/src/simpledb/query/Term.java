@@ -102,6 +102,17 @@ public class Term {
      * @return the integer reduction factor.
      */
     public int reductionFactor(Plan p) {
+        if (!isEqualityComparison() && (lhs.isFieldName() || rhs.isFieldName())) {
+            /*
+             * SimpleDB does not maintain value ranges or distribution statistics,
+             * so it cannot accurately estimate how many records satisfy an
+             * inequality. Use a reduction factor of 2 to assume that approximately
+             * half of the records match. This affects plan-cost estimates only,
+             * not the actual predicate results.
+             */
+            return 2;
+        }
+
         String lhsName, rhsName;
         if (lhs.isFieldName() && rhs.isFieldName()) {
             lhsName = lhs.asFieldName();
@@ -118,7 +129,7 @@ public class Term {
             return p.distinctValues(rhsName);
         }
         // otherwise, the term equates constants
-        if (lhs.asConstant().equals(rhs.asConstant()))
+        if (compare(lhs.asConstant(), rhs.asConstant()))
             return 1;
         else
             return Integer.MAX_VALUE;
