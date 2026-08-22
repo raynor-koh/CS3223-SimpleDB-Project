@@ -50,7 +50,46 @@ public class Term {
     public boolean isSatisfied(Scan s) {
         Constant lhsval = lhs.evaluate(s);
         Constant rhsval = rhs.evaluate(s);
-        return rhsval.equals(lhsval);
+
+        return compare(lhsval, rhsval);
+    }
+
+    /**
+     * Compares two constants using the operator in this term.
+     * 
+     * @param lhsval value on the LHS
+     * @param rhsval value on the RHS
+     * @return true if the comparision is valid
+     */
+    private boolean compare(Constant lhsVal, Constant rhsVal) {
+        // Preserve the SQL operand order: a negative result means lhs < rhs.
+        // Comparing rhs to lhs instead would reverse the meaning of <, <=, >, and >=.
+        int result = lhsVal.compareTo(rhsVal);
+
+        switch (operator) {
+            case "=":
+                return result == 0;
+
+            case "<":
+                return result < 0;
+
+            case "<=":
+                return result <= 0;
+
+            case ">":
+                return result > 0;
+
+            case ">=":
+                return result >= 0;
+
+            case "!=":
+            case "<>":
+                return result != 0;
+
+            default:
+                throw new IllegalArgumentException(
+                        "Unsupported comparison operator: " + operator);
+        }
     }
 
     /**
