@@ -17,3 +17,17 @@ For invalid comparison operators, the terminal will print `Invalid comparison op
 | age != 18 | age != 18 |
 | 18 > age | 18 > age |
 | age ! 8 | Invalid comparison operator |
+
+### Update Term Grammar in Parser
+
+Run `src/simpledb/parse/ParserTest.java`
+
+If the parsing succeeded, `yes` will be printed.
+If the parsing did not succeed, `no` will be printed instead.
+
+| Test Cases | Output |
+| --- | --- |
+| select age from student where age >= 18 | yes |
+| select age from student where age == 18 | no |
+| select age from student where age <> 18 | no |
+| select age from student where age = 18 | yes |
