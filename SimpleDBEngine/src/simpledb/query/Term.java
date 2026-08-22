@@ -125,6 +125,18 @@ public class Term {
     }
 
     /**
+     * The optimizer uses equatesWithConstant() and equatesWithField() to
+     * identify predicates suitable for equality-based optimizations, such
+     * as index lookups. Inequality predicates must not be treated as
+     * equalities because doing so could produce incorrect query results.
+     * 
+     * Returns true when this term uses the equality operator
+     */
+    private boolean isEqualityComparison() {
+        return "=".equals(operator);
+    }
+
+    /**
      * Determine if this term is of the form "F=c"
      * where F is the specified field and c is some constant.
      * If so, the method returns that constant.
@@ -134,6 +146,10 @@ public class Term {
      * @return either the constant or null
      */
     public Constant equatesWithConstant(String fldname) {
+        if (!isEqualityComparison()) {
+            return null;
+        }
+
         if (lhs.isFieldName() &&
                 lhs.asFieldName().equals(fldname) &&
                 !rhs.isFieldName())
@@ -156,6 +172,10 @@ public class Term {
      * @return either the name of the other field, or null
      */
     public String equatesWithField(String fldname) {
+        if (!isEqualityComparison()) {
+            return null;
+        }
+
         if (lhs.isFieldName() &&
                 lhs.asFieldName().equals(fldname) &&
                 rhs.isFieldName())
