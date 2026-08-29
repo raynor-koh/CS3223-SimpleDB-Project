@@ -22,6 +22,7 @@ public class IndexInfo {
    private Schema tblSchema;
    private Layout idxLayout;
    private StatInfo si;
+   private String indextype;
    
    /**
     * Create an IndexInfo object for the specified index.
@@ -32,13 +33,19 @@ public class IndexInfo {
     * @param si the statistics for the table
     */
    public IndexInfo(String idxname, String fldname, Schema tblSchema,
-                    Transaction tx,  StatInfo si) {
+                    Transaction tx,  StatInfo si, String indexType) {
       this.idxname = idxname;
       this.fldname = fldname;
       this.tx = tx;
       this.tblSchema = tblSchema;
       this.idxLayout = createIdxLayout();
       this.si = si;
+      this.indextype = indexType;
+   }
+
+   public IndexInfo(String idxname, String fldname, Schema tblSchema,
+                    Transaction tx, StatInfo si) {
+       this(idxname, fldname, tblSchema, tx, si, "hash");
    }
    
    /**
@@ -108,5 +115,10 @@ public class IndexInfo {
          sch.addStringField("dataval", fldlen);
       }
       return new Layout(sch);
+   }
+
+   // Expose indexType for testing
+   public String indexType() {
+       return indextype;
    }
 }
