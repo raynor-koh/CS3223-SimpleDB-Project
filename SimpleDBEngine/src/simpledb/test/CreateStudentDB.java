@@ -16,13 +16,9 @@ public class CreateStudentDB {
          planner.executeUpdate(s, tx);
          System.out.println("Table STUDENT created.");
 
-         s = "create index idx_stud_major on STUDENT(MajorId)";
+         s = "create index idx_stud_major on STUDENT(MajorId) using hash";
          planner.executeUpdate(s, tx);
-         System.out.println("Index idx_stud_major created.");
-
-         s = "create index idx_enrol_sid on ENROLL(StudentId)";
-         planner.executeUpdate(s, tx);
-         System.out.println("Index idx_enrol_sid created.");
+         System.out.println("Index idx_stud_major created with hash index.");
 
          s = "insert into STUDENT(SId, SName, MajorId, GradYear) values ";
          String[] studvals = { "(1, 'joe', 10, 2021)",
@@ -83,9 +79,9 @@ public class CreateStudentDB {
          planner.executeUpdate(s, tx);
          System.out.println("Table ENROLL created.");
 
-         s = "create index idx_enroll_sid on ENROLL(StudentId)";
+         s = "create index idx_enroll_sid on ENROLL(StudentId) using btree";
          planner.executeUpdate(s, tx);
-         System.out.println("Index idx_enroll_sid created.");
+         System.out.println("Index idx_enroll_sid created with btree index.");
 
          s = "insert into ENROLL(EId, StudentId, SectionId, Grade) values ";
          String[] enrollvals = { "(14, 1, 13, 'A')",
