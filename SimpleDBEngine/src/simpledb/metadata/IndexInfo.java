@@ -55,13 +55,13 @@ public class IndexInfo {
    }
 
    private String normalizeIndexType(String indexType) {
-    if (indextype == null) {
+    if (indexType == null) {
          throw new IllegalArgumentException(
                "Index type in metadata cannot be null");
       }
 
       String normalized =
-            indextype.toLowerCase(Locale.ROOT);
+            indexType.toLowerCase(Locale.ROOT);
 
       if (!HASH.equals(normalized) &&
           !BTREE.equals(normalized)) {
