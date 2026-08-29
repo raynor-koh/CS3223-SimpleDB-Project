@@ -82,6 +82,66 @@ public class Lexer {
          throw new BadSyntaxException();
       nextToken();
    }
+
+    /**
+     * Consumes and returns a comparison operator.
+     * Supported operators are: =, <, <=, >, >=, != and <>
+     * 
+     * Throws an exception if the current token does not begin a valid comparison
+     * operator
+     * 
+     * @return the comparison operator
+     */
+    public String eatOpr() {
+        // Handles = comparison operator
+        if (matchDelim('=')) {
+            eatDelim('=');
+            return "=";
+        }
+
+        // Handles <, <= and <> comparison operators
+        if (matchDelim('<')) {
+            eatDelim('<');
+
+            if (matchDelim('=')) {
+                eatDelim('=');
+                return "<=";
+            }
+
+            if (matchDelim('>')) {
+                eatDelim('>');
+                return "<>";
+            }
+
+            return "<";
+        }
+
+        // Handles > and >= comparison operators
+        if (matchDelim('>')) {
+            eatDelim('>');
+
+            if (matchDelim('=')) {
+                eatDelim('=');
+                return ">=";
+            }
+
+            return ">";
+        }
+
+        // Handles != comparison operators
+        if (matchDelim('!')) {
+            eatDelim('!');
+
+            if (matchDelim('=')) {
+                eatDelim('=');
+                return "!=";
+            }
+
+            throw new BadSyntaxException();
+        }
+
+        throw new BadSyntaxException();
+    }
    
    /**
     * Throws an exception if the current token is not 

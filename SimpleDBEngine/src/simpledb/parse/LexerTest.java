@@ -2,7 +2,7 @@ package simpledb.parse;
 import java.util.Scanner;
 
 // Will successfully read in lines of text denoting an
-// SQL expression of the form "id = c" or "c = id".
+// SQL expression of the form "id opr  c" or "c opr id".
 
 public class LexerTest {
 	public static void main(String[] args) {
@@ -10,18 +10,27 @@ public class LexerTest {
 		while (sc.hasNext()) {
 			String s = sc.nextLine();
 			Lexer lex = new Lexer(s);
-			String x; int y;
+            String x;
+            String opr;
+            int y;
+            try {
 			if (lex.matchId()) {
 				x = lex.eatId();
-				lex.eatDelim('=');
+                opr = lex.eatOpr();
 				y = lex.eatIntConstant();
-			}
-			else {
+
+                    System.out.println(x + " " + opr + " " + y);
+                } else {
 				y = lex.eatIntConstant();
-				lex.eatDelim('=');
+                    opr = lex.eatOpr();
 				x = lex.eatId();	
+
+                    System.out.println(y + " " + opr + " " + x);
 			}
-			System.out.println(x + " equals " + y);
+            } catch (BadSyntaxException exception) {
+                System.out.println("Invalid comparison operator");
+            }
+
 		}
 		sc.close();
 	}
