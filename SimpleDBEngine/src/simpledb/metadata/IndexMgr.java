@@ -46,12 +46,7 @@ class IndexMgr {
     * @param tx the calling transaction
     */
    public void createIndex(String idxname, String tblname, String fldname, Transaction tx) {
-      TableScan ts = new TableScan(tx, "idxcat", layout);
-      ts.insert();
-      ts.setString("indexname", idxname);
-      ts.setString("tablename", tblname);
-      ts.setString("fieldname", fldname);
-      ts.close();
+      createIndex(idxname, tblname, fldname, "hash", tx);
    }
 
    public void createIndex(
