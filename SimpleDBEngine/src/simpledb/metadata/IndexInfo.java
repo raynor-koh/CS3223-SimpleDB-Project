@@ -77,8 +77,15 @@ public class IndexInfo {
     * @return the Index object associated with this information
     */
    public Index open() {
-      // return new HashIndex(tx, idxname, idxLayout);
-      return new BTreeIndex(tx, idxname, idxLayout);
+      if (HASH.equals(indextype)) {
+        return new HashIndex(tx, idxname, idxLayout);
+      }
+      
+      if (BTREE.equals(indextype)) {
+        return new BTreeIndex(tx, idxname, idxLayout);
+      }
+
+      throw new IllegalStateException("Unsupported index type: " + indextype);
    }
    
    /**
@@ -94,9 +101,20 @@ public class IndexInfo {
     */
    public int blocksAccessed() {
       int rpb = tx.blockSize() / idxLayout.slotSize();
-      int numblocks = si.recordsOutput() / rpb;
-      // return HashIndex.searchCost(numblocks, rpb);
-      return BTreeIndex.searchCost(numblocks, rpb);
+      // Ceiling division and at least one block avoids passing zero
+      // into BTreeIndex.searchCost(), which calculates log(numblocks).
+      int numrecords = si.recordsOutput();
+      int numblocks =Math.max(1, (numrecords + rpb - 1) / rpb);
+      
+      if (HASH.equals(indextype)) {
+        return HashIndex.searchCost(numblocks, rpb);
+      }
+      
+      if (BTREE.equals(indextype)) {
+        return BTreeIndex.searchCost(numblocks, rpb);
+      }
+      
+      throw new IllegalStateException("Unsupported index type: " + indextype);
    }
    
    /**
