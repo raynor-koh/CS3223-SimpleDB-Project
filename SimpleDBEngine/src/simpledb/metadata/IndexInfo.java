@@ -1,6 +1,9 @@
 package simpledb.metadata;
 
 import static java.sql.Types.INTEGER;
+
+import java.util.Locale;
+
 import simpledb.tx.Transaction;
 import simpledb.record.*;
 import simpledb.index.Index;
@@ -17,12 +20,15 @@ import simpledb.index.btree.BTreeIndex; //in case we change to btree indexing
  * @author Edward Sciore
  */
 public class IndexInfo {
+   private static final String HASH = "hash";
+   private static final String BTREE = "btree";
+
    private String idxname, fldname;
+   private String indextype;
    private Transaction tx;
    private Schema tblSchema;
    private Layout idxLayout;
    private StatInfo si;
-   private String indextype;
    
    /**
     * Create an IndexInfo object for the specified index.
@@ -40,12 +46,30 @@ public class IndexInfo {
       this.tblSchema = tblSchema;
       this.idxLayout = createIdxLayout();
       this.si = si;
-      this.indextype = indexType;
+      this.indextype = normalizeIndexType(indexType);
    }
 
    public IndexInfo(String idxname, String fldname, Schema tblSchema,
                     Transaction tx, StatInfo si) {
-       this(idxname, fldname, tblSchema, tx, si, "hash");
+       this(idxname, fldname, tblSchema, tx, si, HASH);
+   }
+
+   private String normalizeIndexType(String indexType) {
+    if (indextype == null) {
+         throw new IllegalArgumentException(
+               "Index type in metadata cannot be null");
+      }
+
+      String normalized =
+            indextype.toLowerCase(Locale.ROOT);
+
+      if (!HASH.equals(normalized) &&
+          !BTREE.equals(normalized)) {
+         throw new IllegalArgumentException(
+               "Unsupported index type in metadata: " + indextype);
+      }
+
+      return normalized;
    }
    
    /**
