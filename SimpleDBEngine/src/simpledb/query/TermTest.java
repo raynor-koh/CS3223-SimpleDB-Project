@@ -20,6 +20,9 @@ public class TermTest {
       testStringComparisons();
       testFieldExpressions();
       testEqualityDetection();
+      testEqualityOnlyIndexSafety();
+      testPredicateEqualityOnlySafety();
+      testMixedPredicateSafety();
       testReductionFactors();
       testBackwardCompatibleConstructor();
       testUnsupportedOperator();
@@ -127,6 +130,52 @@ public class TermTest {
       check(new Term(field("A"), "!=", field("B"))
                   .equatesWithField("A") == null,
             "A != B must not be treated as an equality");
+   }
+
+   private static void testEqualityOnlyIndexSafety() {
+      String[] inequalities = { "<", "<=", ">", ">=", "!=", "<>" };
+
+      for (String operator : inequalities) {
+         Term fieldConstant =
+               new Term(field("A"), operator, constant(10));
+         check(fieldConstant.equatesWithConstant("A") == null,
+               "A " + operator + " 10 must not support an index lookup");
+
+         Term constantField =
+               new Term(constant(10), operator, field("A"));
+         check(constantField.equatesWithConstant("A") == null,
+               "10 " + operator + " A must not support an index lookup");
+
+         Term fieldField =
+               new Term(field("A"), operator, field("B"));
+         check(fieldField.equatesWithField("A") == null,
+               "A " + operator + " B must not support an index join on A");
+         check(fieldField.equatesWithField("B") == null,
+               "A " + operator + " B must not support an index join on B");
+      }
+   }
+
+   private static void testPredicateEqualityOnlySafety() {
+      Predicate inequality = new Predicate(
+            new Term(field("A"), ">", constant(10)));
+      check(inequality.equatesWithConstant("A") == null,
+            "Predicate containing A > 10 must not expose an equality");
+
+      Predicate inequalityJoin = new Predicate(
+            new Term(field("A"), "<", field("B")));
+      check(inequalityJoin.equatesWithField("A") == null,
+            "Predicate containing A < B must not expose an equality join");
+   }
+
+   private static void testMixedPredicateSafety() {
+      Predicate pred = new Predicate(
+            new Term(field("A"), ">", constant(10)));
+      pred.conjoinWith(new Predicate(
+            new Term(field("A"), "=", constant(20))));
+
+      Constant equality = pred.equatesWithConstant("A");
+      check(new Constant(20).equals(equality),
+            "A > 10 and A = 20 should expose only the equality value");
    }
 
    private static void testReductionFactors() {

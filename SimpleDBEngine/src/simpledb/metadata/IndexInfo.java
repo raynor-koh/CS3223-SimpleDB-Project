@@ -1,6 +1,9 @@
 package simpledb.metadata;
 
 import static java.sql.Types.INTEGER;
+
+import java.util.Locale;
+
 import simpledb.tx.Transaction;
 import simpledb.record.*;
 import simpledb.index.Index;
@@ -17,7 +20,11 @@ import simpledb.index.btree.BTreeIndex; //in case we change to btree indexing
  * @author Edward Sciore
  */
 public class IndexInfo {
+   private static final String HASH = "hash";
+   private static final String BTREE = "btree";
+
    private String idxname, fldname;
+   private String indextype;
    private Transaction tx;
    private Schema tblSchema;
    private Layout idxLayout;
@@ -32,13 +39,37 @@ public class IndexInfo {
     * @param si the statistics for the table
     */
    public IndexInfo(String idxname, String fldname, Schema tblSchema,
-                    Transaction tx,  StatInfo si) {
+                    Transaction tx,  StatInfo si, String indexType) {
       this.idxname = idxname;
       this.fldname = fldname;
       this.tx = tx;
       this.tblSchema = tblSchema;
       this.idxLayout = createIdxLayout();
       this.si = si;
+      this.indextype = normalizeIndexType(indexType);
+   }
+
+   public IndexInfo(String idxname, String fldname, Schema tblSchema,
+                    Transaction tx, StatInfo si) {
+       this(idxname, fldname, tblSchema, tx, si, HASH);
+   }
+
+   private String normalizeIndexType(String indexType) {
+    if (indexType == null) {
+         throw new IllegalArgumentException(
+               "Index type in metadata cannot be null");
+      }
+
+      String normalized =
+            indexType.toLowerCase(Locale.ROOT);
+
+      if (!HASH.equals(normalized) &&
+          !BTREE.equals(normalized)) {
+         throw new IllegalArgumentException(
+               "Unsupported index type in metadata: " + indextype);
+      }
+
+      return normalized;
    }
    
    /**
@@ -46,8 +77,15 @@ public class IndexInfo {
     * @return the Index object associated with this information
     */
    public Index open() {
-      return new HashIndex(tx, idxname, idxLayout);
-//    return new BTreeIndex(tx, idxname, idxLayout);
+      if (HASH.equals(indextype)) {
+        return new HashIndex(tx, idxname, idxLayout);
+      }
+      
+      if (BTREE.equals(indextype)) {
+        return new BTreeIndex(tx, idxname, idxLayout);
+      }
+
+      throw new IllegalStateException("Unsupported index type: " + indextype);
    }
    
    /**
@@ -63,9 +101,20 @@ public class IndexInfo {
     */
    public int blocksAccessed() {
       int rpb = tx.blockSize() / idxLayout.slotSize();
-      int numblocks = si.recordsOutput() / rpb;
-      return HashIndex.searchCost(numblocks, rpb);
-//    return BTreeIndex.searchCost(numblocks, rpb);
+      // Ceiling division and at least one block avoids passing zero
+      // into BTreeIndex.searchCost(), which calculates log(numblocks).
+      int numrecords = si.recordsOutput();
+      int numblocks =Math.max(1, (numrecords + rpb - 1) / rpb);
+      
+      if (HASH.equals(indextype)) {
+        return HashIndex.searchCost(numblocks, rpb);
+      }
+      
+      if (BTREE.equals(indextype)) {
+        return BTreeIndex.searchCost(numblocks, rpb);
+      }
+      
+      throw new IllegalStateException("Unsupported index type: " + indextype);
    }
    
    /**
@@ -108,5 +157,10 @@ public class IndexInfo {
          sch.addStringField("dataval", fldlen);
       }
       return new Layout(sch);
+   }
+
+   // Expose indexType for testing
+   public String indexType() {
+       return indextype;
    }
 }

@@ -54,7 +54,7 @@ field-to-field comparisons, and predicates connected by `AND`.
 Run `src/simpledb/query/TermTest.java`.
 
 This test uses in-memory `Scan` and `Plan` implementations. It does not create
-or modify database files. It performs 58 checks in the following areas:
+or modify database files. It performs 85 checks in the following areas:
 
 - all comparison operators for integers and strings;
 - equality boundary cases for `<`, `<=`, `>`, and `>=`;
@@ -63,6 +63,10 @@ or modify database files. It performs 58 checks in the following areas:
 - identical behavior for `!=` and `<>`;
 - equality-only behavior in `equatesWithConstant()` and
   `equatesWithField()`;
+- all six non-equality operators in field-to-constant,
+  constant-to-field, and field-to-field optimizer checks;
+- equality-only behavior through `Predicate`; and
+- mixed predicates that contain both an inequality and a usable equality;
 - equality, inequality, and constant-to-constant reduction factors;
 - backward compatibility of the two-argument `Term` constructor; and
 - rejection of unsupported operators during evaluation.
@@ -98,7 +102,7 @@ Representative optimizer-safety cases include:
 The expected final output is:
 
 ```text
-All 58 Term checks passed.
+All 85 Term checks passed.
 ```
 
 ### SelectScan: Non-Equality Integration Tests
@@ -141,3 +145,54 @@ All 13 ScanTest3 checks passed.
 
 The generated `scantest3/` database directory is a test artifact and should
 not be committed.
+
+## Typed Index Structures
+
+### CREATE INDEX Parser Tests
+
+Run:
+
+```text
+java -cp bin simpledb.parse.CreateIndexParserTest
+```
+
+The 24 checks cover:
+
+- the default `hash` type when `USING` is omitted;
+- explicit `USING hash` and `USING btree` clauses;
+- normalization of index, table, field, and type names;
+- rejection of unsupported and missing index types; and
+- direct `CreateIndexData` validation for invalid and null types.
+
+The expected final output is:
+
+```text
+All 24 CREATE INDEX parser checks passed.
+```
+
+### Typed Index Integration Tests
+
+Run:
+
+```text
+java -cp bin simpledb.index.TypedIndexIntegrationTest
+```
+
+This test creates an isolated database under the operating system's temporary
+directory rather than using `studentdb`. Its 56 checks cover:
+
+- persistence of `hash` and `btree` values through `idxcat` and a database
+  reopen;
+- creation of the corresponding `HashIndex` and `BTreeIndex` objects;
+- simultaneous hash and B-tree indexes in one database;
+- index maintenance after insert, indexed-field update, and delete;
+- direct retrieval through both index implementations;
+- equality queries with the indexed field on either side; and
+- correct results for `<`, `<=`, `>`, `>=`, `!=`, and `<>` predicates on an
+  indexed field.
+
+The expected final output is:
+
+```text
+All 56 typed-index integration checks passed.
+```

@@ -2,6 +2,7 @@ package simpledb.metadata;
 
 import java.util.Map;
 import simpledb.tx.Transaction;
+import simpledb.parse.CreateIndexData;
 import simpledb.record.*;
 
 public class MetadataMgr {
@@ -34,7 +35,11 @@ public class MetadataMgr {
    }
    
    public void createIndex(String idxname, String tblname, String fldname, Transaction tx) {
-      idxmgr.createIndex(idxname, tblname, fldname, tx);
+      createIndex(idxname, tblname, fldname, "hash", tx);
+   }
+
+   public void createIndex(String idxname, String tblname, String fldname, String indexType,Transaction tx) {
+       idxmgr.createIndex(idxname, tblname, fldname, indexType, tx);
    }
    
    public Map<String,IndexInfo> getIndexInfo(String tblname, Transaction tx) {
