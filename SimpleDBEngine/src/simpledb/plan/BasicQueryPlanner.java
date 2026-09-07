@@ -3,7 +3,7 @@ package simpledb.plan;
 import java.util.*;
 import simpledb.tx.Transaction;
 import simpledb.metadata.*;
-import simpledb.materialize.SortPlan;
+import simpledb.materialize.*;
 import simpledb.parse.*;
 
 /**
