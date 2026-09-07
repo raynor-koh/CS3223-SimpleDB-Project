@@ -196,3 +196,79 @@ The expected final output is:
 ```text
 All 56 typed-index integration checks passed.
 ```
+
+### ORDER BY Parser Tests
+
+Run:
+
+```powershell
+java -cp bin simpledb.parse.OrderByParserTest
+```
+
+The checks cover:
+
+- queries with no `ORDER BY` clause;
+- the default ascending direction;
+- explicit `ASC` and `DESC` directions;
+- multiple fields with mixed directions;
+- case-insensitive sorting keywords;
+- inclusion of sorting in `QueryData.toString()`; and
+- malformed clauses with a missing `BY` or field.
+
+The expected final output is:
+
+```text
+All 15 ORDER BY parser checks passed.
+```
+
+### ORDER BY Integration Tests
+
+Run:
+
+```powershell
+java -cp bin simpledb.materialize.OrderByIntegrationTest
+```
+
+The checks cover:
+
+- no `SortPlan` when `ORDER BY` is absent;
+- a top-level `SortPlan` when ordering is requested;
+- integer and string fields in ascending and descending order;
+- multiple sort keys with mixed directions;
+- an index-backed equality selection followed by sorting;
+- sorting an empty query result safely; and
+- both `HeuristicQueryPlanner` and `BasicQueryPlanner`.
+
+The integration test creates its database under the operating system's
+temporary directory and does not modify `studentdb`.
+
+The expected final output is:
+
+```text
+All 14 ORDER BY integration checks passed.
+```
+
+### Manual SimpleIJ Tests
+
+After creating `studentdb`, run:
+
+```powershell
+java -cp bin simpledb.test.SimpleIJ
+```
+
+Representative queries are:
+
+```sql
+select sid, sname, gradyear from student order by gradyear
+```
+
+```sql
+select sid, sname, gradyear from student order by gradyear asc, sname desc
+```
+
+```sql
+select sid, sname, gradyear from student where gradyear >= 2021 order by gradyear desc, sname
+```
+
+The first query uses ascending order by default. The other queries verify
+explicit and mixed directions together with a non-equality predicate.

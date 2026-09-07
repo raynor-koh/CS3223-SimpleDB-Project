@@ -3,6 +3,7 @@ package simpledb.plan;
 import java.util.*;
 import simpledb.tx.Transaction;
 import simpledb.metadata.*;
+import simpledb.materialize.*;
 import simpledb.parse.*;
 
 /**
@@ -18,8 +19,8 @@ public class BasicQueryPlanner implements QueryPlanner {
    
    /**
     * Creates a query plan as follows.  It first takes
-    * the product of all tables and views; it then selects on the predicate;
-    * and finally it projects on the field list. 
+    * the product of all tables and views; it then selects on the predicate,
+    * projects on the field list, and applies any requested ordering.
     */
    public Plan createPlan(QueryData data, Transaction tx) {
       //Step 1: Create a plan for each mentioned table or view.
@@ -45,6 +46,11 @@ public class BasicQueryPlanner implements QueryPlanner {
       
       //Step 4: Project on the field names
       p = new ProjectPlan(p, data.fields());
+
+      //Step 5: Sort only when the query has an ORDER BY clause
+      if (data.hasOrderBy())
+         p = new SortPlan(tx, p, data.orderFields(),
+                          data.orderDirections());
       return p;
    }
 }

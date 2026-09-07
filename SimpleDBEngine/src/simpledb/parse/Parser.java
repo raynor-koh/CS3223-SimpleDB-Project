@@ -64,7 +64,15 @@ public class Parser {
          lex.eatKeyword("where");
          pred = predicate();
       }
-      return new QueryData(fields, tables, pred);
+      List<String> orderFields = new ArrayList<String>();
+      List<Boolean> orderDirections = new ArrayList<Boolean>();
+      if (lex.matchKeyword("order")) {
+         lex.eatKeyword("order");
+         lex.eatKeyword("by");
+         orderList(orderFields, orderDirections);
+      }
+      return new QueryData(fields, tables, pred,
+                           orderFields, orderDirections);
    }
    
    private List<String> selectList() {
@@ -85,6 +93,28 @@ public class Parser {
          L.addAll(tableList());
       }
       return L;
+   }
+
+   /**
+    * Parses a comma-separated ORDER BY list. Each field defaults to
+    * ascending order unless it is followed by DESC.
+    */
+   private void orderList(List<String> fields,
+                          List<Boolean> directions) {
+      fields.add(field());
+      boolean ascending = true;
+      if (lex.matchKeyword("asc"))
+         lex.eatKeyword("asc");
+      else if (lex.matchKeyword("desc")) {
+         lex.eatKeyword("desc");
+         ascending = false;
+      }
+      directions.add(ascending);
+
+      if (lex.matchDelim(',')) {
+         lex.eatDelim(',');
+         orderList(fields, directions);
+      }
    }
    
 // Methods for parsing the various update commands
