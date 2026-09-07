@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import simpledb.index.planner.IndexUpdatePlanner;
+import simpledb.opt.HeuristicQueryPlanner;
 import simpledb.parse.Parser;
 import simpledb.plan.BasicQueryPlanner;
 import simpledb.plan.Plan;
@@ -23,11 +25,13 @@ public class OrderByIntegrationTest {
    public static void main(String[] args) throws Exception {
       Path testRoot = Files.createTempDirectory("simpledb-order-by-");
       SimpleDB db = new SimpleDB(testRoot.resolve("database").toString());
-      Planner planner = db.planner();
+      Planner heuristicPlanner = new Planner(
+            new HeuristicQueryPlanner(db.mdMgr()),
+            new IndexUpdatePlanner(db.mdMgr()));
       Transaction tx = db.newTx();
 
-      createRows(planner, tx);
-      testHeuristicPlanner(planner, tx);
+      createRows(heuristicPlanner, tx);
+      testHeuristicPlanner(heuristicPlanner, tx);
       testBasicPlanner(db, tx);
 
       tx.commit();
