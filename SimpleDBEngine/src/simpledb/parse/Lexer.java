@@ -212,6 +212,8 @@ public class Lexer {
                                "insert", "into", "values", "delete", "update", "set", 
                                "create", "table", "int", "varchar", "view", "as", "index", "on",
                                // index related keywords
-                               "using", "hash", "btree");
+                               "using", "hash", "btree",
+                               // sorting related keywords
+                               "order", "by", "asc", "desc");
    }
 }

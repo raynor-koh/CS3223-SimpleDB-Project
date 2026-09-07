@@ -10,6 +10,7 @@ import simpledb.query.*;
  */
 public class RecordComparator implements Comparator<Scan> {
    private List<String> fields;
+   private List<Boolean> directions;
    
    /**
     * Create a comparator using the specified fields,
@@ -17,7 +18,21 @@ public class RecordComparator implements Comparator<Scan> {
     * @param fields a list of field names
     */
    public RecordComparator(List<String> fields) {
-      this.fields = fields;
+      this(fields, ascendingDirections(fields.size()));
+   }
+
+   /**
+    * Create a comparator using the specified fields and directions.
+    * Each true direction is ascending and each false direction is descending.
+    * @param fields a list of field names
+    * @param directions the direction corresponding to each field
+    */
+   public RecordComparator(List<String> fields, List<Boolean> directions) {
+      if (fields.size() != directions.size())
+         throw new IllegalArgumentException(
+               "Each sort field must have a direction");
+      this.fields = new ArrayList<String>(fields);
+      this.directions = new ArrayList<Boolean>(directions);
    }
    
    /**
@@ -33,13 +48,21 @@ public class RecordComparator implements Comparator<Scan> {
     * @return the result of comparing each scan's current record according to the field list
     */
    public int compare(Scan s1, Scan s2) {
-      for (String fldname : fields) {
+      for (int i = 0; i < fields.size(); i++) {
+         String fldname = fields.get(i);
          Constant val1 = s1.getVal(fldname);
          Constant val2 = s2.getVal(fldname);
          int result = val1.compareTo(val2);
          if (result != 0)
-            return result;
+            return directions.get(i) ? result : -result;
       }
       return 0;
+   }
+
+   private static List<Boolean> ascendingDirections(int count) {
+      List<Boolean> result = new ArrayList<Boolean>();
+      for (int i = 0; i < count; i++)
+         result.add(true);
+      return result;
    }
 }

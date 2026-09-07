@@ -23,10 +23,23 @@ public class SortPlan implements Plan {
     * @param tx the calling transaction
     */
    public SortPlan(Transaction tx, Plan p, List<String> sortfields) {
+      this(tx, p, sortfields, ascendingDirections(sortfields.size()));
+   }
+
+   /**
+    * Create a sort plan for the specified query and sort directions.
+    * Each true direction is ascending and each false direction is descending.
+    * @param tx the calling transaction
+    * @param p the plan for the underlying query
+    * @param sortfields the fields to sort by
+    * @param sortdirections the direction corresponding to each sort field
+    */
+   public SortPlan(Transaction tx, Plan p, List<String> sortfields,
+                   List<Boolean> sortdirections) {
       this.tx = tx;
       this.p = p;
       sch = p.schema();
-      comp = new RecordComparator(sortfields);
+      comp = new RecordComparator(sortfields, sortdirections);
    }
    
    /**
@@ -149,5 +162,12 @@ public class SortPlan implements Plan {
       for (String fldname : sch.fields())
          dest.setVal(fldname, src.getVal(fldname));
       return src.next();
+   }
+
+   private static List<Boolean> ascendingDirections(int count) {
+      List<Boolean> result = new ArrayList<Boolean>();
+      for (int i = 0; i < count; i++)
+         result.add(true);
+      return result;
    }
 }
