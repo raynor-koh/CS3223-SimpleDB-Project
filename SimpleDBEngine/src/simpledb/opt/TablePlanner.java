@@ -16,6 +16,8 @@ import simpledb.plan.*;
  * @author Edward Sciore
  */
 class TablePlanner {
+    /** Enable with -Dsimpledb.traceJoins=true when manually testing plans. */
+    private static final boolean TRACE_JOINS = Boolean.getBoolean("simpledb.traceJoins");
     private TablePlan myplan;
     private Predicate mypred;
     private Schema myschema;
@@ -95,6 +97,7 @@ class TablePlanner {
      */
     public Plan makeProductPlan(Plan current) {
         Plan p = addSelectPred(myplan);
+        trace("cross product");
         return new MultibufferProductPlan(tx, current, p);
     }
 
@@ -115,6 +118,7 @@ class TablePlanner {
             String outerfield = mypred.equatesWithField(fldname);
             if (outerfield != null && currsch.hasField(outerfield)) {
                 IndexInfo ii = indexes.get(fldname);
+                trace("index join: " + outerfield + " = " + fldname);
                 Plan p = new IndexJoinPlan(current, myplan, ii, outerfield);
                 p = addSelectPred(p);
                 return addJoinPred(p, currsch);
@@ -133,6 +137,7 @@ class TablePlanner {
         // Predicates involving only this table should be applied before joining.
         Plan rhs = addSelectPred(myplan);
 
+        trace("nested-loops join: " + joinpred);
         return new NestedLoopJoinPlan(current, rhs, joinpred);
     }
 
@@ -153,6 +158,7 @@ class TablePlanner {
                 // Apply predicates that concern only the new table before sorting.
                 Plan rhs = addSelectPred(myplan);
 
+                trace("sort-merge join: " + outerField + " = " + innerField);
                 Plan p = new MergeJoinPlan(
                         tx,
                         current,
@@ -189,5 +195,10 @@ class TablePlanner {
             return new SelectPlan(p, joinpred);
         else
             return p;
+    }
+
+    private static void trace(String message) {
+        if (TRACE_JOINS)
+            System.out.println("[planner] " + message);
     }
 }
