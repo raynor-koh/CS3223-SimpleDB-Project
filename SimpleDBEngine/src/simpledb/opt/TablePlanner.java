@@ -67,13 +67,22 @@ class TablePlanner {
     public Plan makeJoinPlan(Plan current) {
         Schema currsch = current.schema();
         Predicate joinpred = mypred.joinSubPred(myschema, currsch);
+
+        // No predicate connects this table to the current plan.
         if (joinpred == null)
             return null;
+
+        // Prefer an index join when the new table has a usable index.
         Plan p = makeIndexJoin(current, currsch);
+
+        // Otherwise, use sort-merge for an equality join.
         if (p == null)
             p = makeMergeJoin(current, currsch);
+
+        // Any remaining join predicate uses nested loops.
         if (p == null)
-            p = makeProductJoin(current, currsch);
+            p = makeNestedLoopJoin(current, currsch);
+
         return p;
     }
 
@@ -114,9 +123,17 @@ class TablePlanner {
         return null;
     }
 
-    private Plan makeProductJoin(Plan current, Schema currsch) {
-        Plan p = makeProductPlan(current);
-        return addJoinPred(p, currsch);
+    /**
+     * Constructs a nested-loops join between the current plan and this table.
+     * The join predicate is evaluated inside NestedLoopJoinScan.
+     */
+    private Plan makeNestedLoopJoin(Plan current, Schema currsch) {
+        Predicate joinpred = mypred.joinSubPred(currsch, myschema);
+
+        // Predicates involving only this table should be applied before joining.
+        Plan rhs = addSelectPred(myplan);
+
+        return new NestedLoopJoinPlan(current, rhs, joinpred);
     }
 
     /**
