@@ -248,6 +248,143 @@ The expected final output is:
 All 14 ORDER BY integration checks passed.
 ```
 
+### Join Integration Tests
+
+Run:
+
+```powershell
+java -cp bin simpledb.opt.JoinIntegrationTest
+```
+
+On macOS or Linux, the command is the same:
+
+```bash
+java -cp bin simpledb.opt.JoinIntegrationTest
+```
+
+This test creates a uniquely named database under the operating system's
+temporary directory. It does not create or modify `studentdb`. The 55 checks
+cover:
+
+- nested-loops joins for equality, `<`, `<=`, `>`, `>=`, `!=`, and `<>`;
+- duplicate join keys, no matches, empty left and right inputs, and repeated
+  scans after `beforeFirst()`;
+- fields read from both inputs and conjunctions containing multiple join terms;
+- sort-merge joins over integer and string keys;
+- duplicate keys on both sides and many-to-many merge-join output;
+- index joins using a hash index, including duplicate entries, reversed
+  equality operands, empty outer input, and no matches;
+- index maintenance after updates and inserts through `IndexUpdatePlanner`;
+- direct physical-plan selection through `TablePlanner`;
+- cross-product fallback for unrelated tables;
+- local selections and residual join predicates;
+- three-table left-deep planning; and
+- consecutive queries through one `HeuristicQueryPlanner` instance.
+
+The expected final output is:
+
+```text
+All 55 join integration checks passed.
+```
+
+The test also verifies that `NestedLoopJoinPlan` opens a
+`NestedLoopJoinScan`, and that `MergeJoinPlan` opens a `MergeJoinScan`.
+
+### Join Strategy Tracing
+
+Join tracing is disabled by default. Enable it with the JVM property
+`simpledb.traceJoins`:
+
+```powershell
+java -Dsimpledb.traceJoins=true -cp bin simpledb.test.SimpleIJ
+```
+
+The trace identifies the physical strategy selected by `TablePlanner`:
+
+```text
+[planner] index join: did = majorid
+[planner] sort-merge join: did = deptid
+[planner] nested-loops join: majorid<did
+[planner] cross product
+```
+
+For two-table queries, the printed strategy is the selected strategy. During a
+multi-table heuristic-planning pass, the planner may print strategies while it
+evaluates candidate tables.
+
+### Recreate the Student Database
+
+The engine-side `simpledb.test.CreateStudentDB` creates the indexes needed for
+the index-join demonstration. Run it from the `SimpleDBEngine` directory:
+
+```powershell
+if (Test-Path .\studentdb) {
+    Remove-Item -Recurse -Force .\studentdb
+}
+java -cp bin simpledb.test.CreateStudentDB
+```
+
+On macOS or Linux:
+
+```bash
+rm -rf -- ./studentdb
+java -cp bin simpledb.test.CreateStudentDB
+```
+
+This setup creates:
+
+- `idx_stud_major` on `STUDENT(MajorId)` using a hash index; and
+- `idx_enroll_sid` on `ENROLL(StudentId)` using a B-tree index.
+
+Do not run the setup program repeatedly against the same database. Recreate
+the database first when starting over.
+
+### SimpleDBClients Network Testing
+
+Compile `SimpleDBEngine` first, then compile `SimpleDBClients`. Start the
+server from the `SimpleDBEngine` directory using the prepared database:
+
+```powershell
+java -Dsimpledb.traceJoins=true -cp bin simpledb.server.StartServer studentdb
+```
+
+From `SimpleDBClients`, run `SimpleIJ` and connect with:
+
+```text
+jdbc:simpledb://localhost
+```
+
+Do not run `network.CreateStudentDB`; the engine-side setup has already
+created and populated the database. For network mode, planner traces appear
+in the server terminal.
+
+Representative join queries are:
+
+```sql
+select SName, DName from DEPT, STUDENT where DId = MajorId
+```
+
+This should use index join because `STUDENT.MajorId` is indexed.
+
+```sql
+select DName, Title from DEPT, COURSE where DId = DeptId
+```
+
+This should use sort-merge join because `COURSE.DeptId` is not indexed.
+
+```sql
+select SName, DName from STUDENT, DEPT where MajorId < DId
+```
+
+This should use nested-loops join because the predicate is not equality.
+
+```sql
+select SName, Title from STUDENT, COURSE
+```
+
+This should use the cross-product path because no predicate connects the
+tables.
+
 ### Manual SimpleIJ Tests
 
 After creating `studentdb`, run:
