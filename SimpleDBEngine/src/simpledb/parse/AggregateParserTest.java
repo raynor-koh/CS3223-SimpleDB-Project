@@ -34,8 +34,21 @@ public class AggregateParserTest {
       check(!plain.hasAggregates(), "Plain query should not have aggregates");
       check(!plain.hasGroupBy(), "Plain query should not have GROUP BY");
 
+      QueryData multiGroup = new Parser(
+            "select dept, name, count(*) from course where credits > 0 "
+            + "group by dept, name order by dept desc, name asc").query();
+      check(multiGroup.groupFields().equals(Arrays.asList("dept", "name")),
+            "Multiple GROUP BY fields should preserve their order");
+      check(multiGroup.orderFields().equals(Arrays.asList("dept", "name")),
+            "ORDER BY should follow GROUP BY");
+      check(multiGroup.toString().equals(
+            "select dept, name, count(*) from course where credits>0 "
+            + "group by dept, name order by dept desc, name asc"),
+            "Unexpected multi-group rendering: " + multiGroup);
+
       expectBadSyntax("select sum(*) from course");
       expectBadSyntax("select count() from course");
+      expectBadSyntax("select count( from course");
       expectBadSyntax("select dept from course group by");
       expectBadSyntax("select agv(credits) from course");
 

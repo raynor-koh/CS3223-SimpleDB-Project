@@ -11,6 +11,7 @@ import java.util.List;
 import simpledb.index.planner.IndexJoinPlan;
 import simpledb.materialize.MergeJoinPlan;
 import simpledb.metadata.IndexInfo;
+import simpledb.multibuffer.HashJoinPlan;
 import simpledb.multibuffer.MultibufferProductPlan;
 import simpledb.parse.Parser;
 import simpledb.parse.QueryData;
@@ -253,17 +254,17 @@ public class JoinIntegrationTest {
             "Reversed equality operands must still select IndexJoinPlan");
       assertCount(indexReverse, 5, "Reversed index equality should return expected rows");
 
-      Plan merge = planTwoTables(db, tx,
+      Plan hash = planTwoTables(db, tx,
             "select lid, rid from leftint, rightint where ikey = jkey");
-      assertCorePlan(merge, MergeJoinPlan.class,
-            "An unindexed equality join must select MergeJoinPlan");
-      assertPairs(merge, "lid", "rid", "2:10", "2:11", "3:10", "3:11");
+      assertCorePlan(hash, HashJoinPlan.class,
+            "An unindexed equality join must select HashJoinPlan");
+      assertPairs(hash, "lid", "rid", "2:10", "2:11", "3:10", "3:11");
 
       Plan residual = planTwoTables(db, tx,
             "select lid, rid from leftint, rightint "
             + "where ikey = jkey and lgroup = rgroup");
-      assertCorePlan(residual, MergeJoinPlan.class,
-            "Merge join should retain a residual join predicate");
+      assertCorePlan(residual, HashJoinPlan.class,
+            "Hash join should retain a residual join predicate");
       assertPairs(residual, "lid", "rid", "2:10", "3:11");
 
       Plan nested = planTwoTables(db, tx,

@@ -88,6 +88,15 @@ public class AggregateIntegrationTest {
       check(scan.getString("maxofname").equals("zoe"), "Unexpected global MAX");
       check(!scan.next(), "Global aggregate should emit one row");
       scan.close();
+
+      Plan integerMinMax = new GroupByPlan(tx, table(db, tx, "items"),
+            Arrays.<String>asList(), Arrays.<AggregationFn>asList(
+                  new MinFn("credits"), new MaxFn("credits")));
+      scan = integerMinMax.open();
+      check(scan.next(), "Integer MIN/MAX should emit one row");
+      check(scan.getInt("minofcredits") == -4, "Unexpected integer MIN");
+      check(scan.getInt("maxofcredits") == 10, "Unexpected integer MAX");
+      scan.close();
    }
 
    private static void testSchemaTypes(SimpleDB db, Transaction tx) {
@@ -180,6 +189,23 @@ public class AggregateIntegrationTest {
       check(scan.getInt("sumofcredits") == 18, "Unexpected planned SUM");
       check(scan.getInt("countofall") == 4, "Unexpected planned COUNT(*)");
       check(!scan.next(), "Global aggregate should return one row");
+      scan.close();
+
+      Plan filteredAndOrdered = planner.createQueryPlan(
+            "select dept, sum(credits), count(*) from items where credits >= 5 "
+            + "group by dept order by sumofcredits desc", tx);
+      scan = filteredAndOrdered.open();
+      check(scan.next() && scan.getString("dept").equals("cs"),
+            "ORDER BY aggregate output should put cs first");
+      check(scan.getInt("sumofcredits") == 12
+            && scan.getInt("countofall") == 2,
+            "Unexpected filtered cs aggregate");
+      check(scan.next() && scan.getString("dept").equals("math"),
+            "Filtered math group should remain");
+      check(scan.getInt("sumofcredits") == 10
+            && scan.getInt("countofall") == 1,
+            "Unexpected filtered math aggregate");
+      check(!scan.next(), "Filtered aggregate query should return two rows");
       scan.close();
 
       expectInvalidQuery(planner,

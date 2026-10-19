@@ -7,6 +7,7 @@ import simpledb.query.*;
 import simpledb.metadata.*;
 import simpledb.index.planner.*;
 import simpledb.materialize.MergeJoinPlan;
+import simpledb.multibuffer.HashJoinPlan;
 import simpledb.multibuffer.MultibufferProductPlan;
 import simpledb.plan.*;
 
@@ -77,7 +78,12 @@ class TablePlanner {
         // Prefer an index join when the new table has a usable index.
         Plan p = makeIndexJoin(current, currsch);
 
-        // Otherwise, use sort-merge for an equality join.
+        // Otherwise, use a partitioned hash join for an equality join.
+        if (p == null)
+            p = makeHashJoin(current, currsch);
+
+        // With too few available buffers for hash partitioning, retain the
+        // existing sort-merge equality fallback.
         if (p == null)
             p = makeMergeJoin(current, currsch);
 
@@ -175,6 +181,26 @@ class TablePlanner {
                  * Rechecking DId = DeptId is harmless and keeps the implementation
                  * correct without needing to remove one term from Predicate.
                  */
+                return addJoinPred(p, currsch);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Constructs a partitioned hash join for an equality predicate connecting
+     * the current left-deep plan to this table. At least three buffers are
+     * required to retain one input buffer and two working buffers.
+     */
+    private Plan makeHashJoin(Plan current, Schema currsch) {
+        if (tx.availableBuffs() < 3)
+            return null;
+        for (String innerField : myschema.fields()) {
+            String outerField = mypred.equatesWithField(innerField);
+            if (outerField != null && currsch.hasField(outerField)) {
+                Plan rhs = addSelectPred(myplan);
+                trace("partitioned hash join: " + outerField + " = " + innerField);
+                Plan p = new HashJoinPlan(tx, current, rhs, outerField, innerField);
                 return addJoinPred(p, currsch);
             }
         }

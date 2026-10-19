@@ -248,6 +248,64 @@ The expected final output is:
 All 14 ORDER BY integration checks passed.
 ```
 
+### Aggregate Parser Tests
+
+Run:
+
+```bash
+java -cp bin simpledb.parse.AggregateParserTest
+```
+
+The checks cover field and aggregate SELECT items, `count(*)`, multiple
+`GROUP BY` fields, `WHERE + GROUP BY + ORDER BY` clause order, stable aggregate
+output names, malformed function calls, invalid `sum(*)`, and rejection of
+the misspelling `agv`.
+
+Expected output:
+
+```text
+All 22 aggregate parser checks passed.
+```
+
+### Aggregate Integration Tests
+
+Run:
+
+```bash
+java -cp bin simpledb.materialize.AggregateIntegrationTest
+```
+
+This isolated temporary-database suite covers `SUM`, `COUNT`, truncating
+integer `AVG`, string and integer `MIN`/`MAX`, grouped/global aggregation,
+`GROUP BY` without aggregates, `WHERE` before aggregation, ordering by an
+aggregate result, planner validation, empty input, overflow, and scan rewind.
+
+Expected output:
+
+```text
+All 74 aggregate integration checks passed.
+```
+
+### Partitioned Hash Join Integration Tests
+
+Run:
+
+```bash
+java -cp bin simpledb.multibuffer.HashJoinIntegrationTest
+```
+
+The suite exercises `HashJoinPlan` directly with integer and string keys,
+negative integer hash codes, duplicate-key many-to-many matches, no matches,
+scan rewind, buffer release, and invalid join-key validation. The broader join
+suite also verifies that `TablePlanner` selects `HashJoinPlan` for unindexed
+equality joins.
+
+Expected output:
+
+```text
+All 23 hash join integration checks passed.
+```
+
 ### Join Integration Tests
 
 Run:
@@ -303,7 +361,7 @@ The trace identifies the physical strategy selected by `TablePlanner`:
 
 ```text
 [planner] index join: did = majorid
-[planner] sort-merge join: did = deptid
+[planner] partitioned hash join: did = deptid
 [planner] nested-loops join: majorid<did
 [planner] cross product
 ```
@@ -370,7 +428,10 @@ This should use index join because `STUDENT.MajorId` is indexed.
 select DName, Title from DEPT, COURSE where DId = DeptId
 ```
 
-This should use sort-merge join because `COURSE.DeptId` is not indexed.
+This should use a partitioned hash join because `COURSE.DeptId` is not indexed
+and the default configuration has enough buffers. Index joins remain preferred
+when an applicable index exists; merge join remains the equality fallback when
+there are fewer than three available buffers.
 
 ```sql
 select SName, DName from STUDENT, DEPT where MajorId < DId

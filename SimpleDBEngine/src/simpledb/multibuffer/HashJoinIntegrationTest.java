@@ -43,10 +43,12 @@ public class HashJoinIntegrationTest {
       insert(planner, tx, "leftrows", "lkey, lvalue", "1, 'b'");
       insert(planner, tx, "leftrows", "lkey, lvalue", "2, 'c'");
       insert(planner, tx, "leftrows", "lkey, lvalue", "4, 'd'");
+      insert(planner, tx, "leftrows", "lkey, lvalue", "-1, 'negative'");
       insert(planner, tx, "rightrows", "rkey, rvalue", "1, 'x'");
       insert(planner, tx, "rightrows", "rkey, rvalue", "1, 'y'");
       insert(planner, tx, "rightrows", "rkey, rvalue", "2, 'w'");
       insert(planner, tx, "rightrows", "rkey, rvalue", "3, 'z'");
+      insert(planner, tx, "rightrows", "rkey, rvalue", "-1, 'neg-match'");
       insert(planner, tx, "nomatches", "nkey, nvalue", "99, 'none'");
    }
 
@@ -75,7 +77,7 @@ public class HashJoinIntegrationTest {
 
       Scan scan = plan.open();
       Set<String> expected = new HashSet<String>(Arrays.asList(
-            "a-x", "a-y", "b-x", "b-y", "c-w"));
+            "a-x", "a-y", "b-x", "b-y", "c-w", "negative-neg-match"));
       check(readPairs(scan, "lvalue", "rvalue").equals(expected),
             "Hash join must preserve duplicate-key many-to-many matches");
       scan.beforeFirst();
