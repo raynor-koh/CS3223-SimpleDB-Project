@@ -44,22 +44,16 @@ public class BasicQueryPlanner implements QueryPlanner {
       //Step 3: Add a selection plan for the predicate
       p = new SelectPlan(p, data.pred());
 
-      data.validateAgainst(p.schema());
-      rejectUnimplementedAggregation(data);
+      // Step 4: Group and aggregate before projecting result fields.
+      p = AggregateQueryPlannerSupport.apply(tx, p, data);
       
-      //Step 4: Project on the field names
+      //Step 5: Project on the field names
       p = new ProjectPlan(p, data.fields());
 
-      //Step 5: Sort only when the query has an ORDER BY clause
+      //Step 6: Sort only when the query has an ORDER BY clause
       if (data.hasOrderBy())
          p = new SortPlan(tx, p, data.orderFields(),
                           data.orderDirections());
       return p;
-   }
-
-   private static void rejectUnimplementedAggregation(QueryData data) {
-      if (data.hasAggregates() || data.hasGroupBy())
-         throw new UnsupportedOperationException(
-               "Aggregate and GROUP BY execution requires the aggregate operator implementation");
    }
 }

@@ -49,13 +49,13 @@ public class HeuristicQueryPlanner implements QueryPlanner {
                 currentplan = getLowestProductPlan(currentplan);
         }
 
-        data.validateAgainst(currentplan.schema());
-        rejectUnimplementedAggregation(data);
+        // Step 4. Group and aggregate before projecting result fields.
+        currentplan = AggregateQueryPlannerSupport.apply(tx, currentplan, data);
 
-        // Step 4. Project on the field names
+        // Step 5. Project on the field names
         Plan result = new ProjectPlan(currentplan, data.fields());
 
-        // Step 5. Sort only when the query has an ORDER BY clause
+        // Step 6. Sort only when the query has an ORDER BY clause
         if (data.hasOrderBy())
             result = new SortPlan(tx, result, data.orderFields(),
                     data.orderDirections());
@@ -110,9 +110,4 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         // for simplicity this code doesn't do.
     }
 
-    private static void rejectUnimplementedAggregation(QueryData data) {
-        if (data.hasAggregates() || data.hasGroupBy())
-            throw new UnsupportedOperationException(
-                    "Aggregate and GROUP BY execution requires the aggregate operator implementation");
-    }
 }

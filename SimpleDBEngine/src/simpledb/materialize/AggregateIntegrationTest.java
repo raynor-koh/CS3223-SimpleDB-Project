@@ -9,8 +9,10 @@ import java.util.Arrays;
 import java.util.List;
 
 import simpledb.plan.Plan;
+import simpledb.plan.BasicQueryPlanner;
 import simpledb.plan.TablePlan;
 import simpledb.plan.Planner;
+import simpledb.parse.Parser;
 import simpledb.query.Scan;
 import simpledb.server.SimpleDB;
 import simpledb.tx.Transaction;
@@ -32,6 +34,7 @@ public class AggregateIntegrationTest {
       testIntegerInputValidation(db, tx);
       testEmptyInput(db, tx);
       testOverflow(db, planner, tx);
+      testSqlPlannerWiring(db, planner, tx);
 
       tx.commit();
       System.out.println("All " + checksRun
@@ -143,6 +146,55 @@ public class AggregateIntegrationTest {
       }
       finally {
          scan.close();
+      }
+   }
+
+   private static void testSqlPlannerWiring(SimpleDB db, Planner planner,
+                                            Transaction tx) {
+      Plan grouped = planner.createQueryPlan(
+            "select dept, sum(credits), avg(credits), count(*), min(name), max(name) "
+            + "from items group by dept order by dept", tx);
+      Scan scan = grouped.open();
+      check(scan.next(), "SQL group-by query should return cs");
+      assertGroup(scan, "cs", 12, 6, 2, "bob", "zoe");
+      check(scan.next(), "SQL group-by query should return math");
+      assertGroup(scan, "math", 6, 3, 2, "amy", "zara");
+      check(!scan.next(), "SQL group-by query should return two rows");
+      scan.close();
+
+      Plan distinctGroups = planner.createQueryPlan(
+            "select dept from items group by dept order by dept", tx);
+      scan = distinctGroups.open();
+      check(scan.next() && scan.getString("dept").equals("cs"),
+            "GROUP BY without aggregates should return cs");
+      check(scan.next() && scan.getString("dept").equals("math"),
+            "GROUP BY without aggregates should return math");
+      check(!scan.next(), "GROUP BY without aggregates should remove duplicates");
+      scan.close();
+
+      BasicQueryPlanner basic = new BasicQueryPlanner(db.mdMgr());
+      Plan global = basic.createPlan(new Parser(
+            "select sum(credits), count(*) from items").query(), tx);
+      scan = global.open();
+      check(scan.next(), "Basic planner should support global aggregation");
+      check(scan.getInt("sumofcredits") == 18, "Unexpected planned SUM");
+      check(scan.getInt("countofall") == 4, "Unexpected planned COUNT(*)");
+      check(!scan.next(), "Global aggregate should return one row");
+      scan.close();
+
+      expectInvalidQuery(planner,
+            "select dept, sum(credits) from items", tx);
+      expectInvalidQuery(planner, "select sum(name) from items", tx);
+   }
+
+   private static void expectInvalidQuery(Planner planner, String sql,
+                                          Transaction tx) {
+      try {
+         planner.createQueryPlan(sql, tx);
+         throw new AssertionError("Expected invalid query: " + sql);
+      }
+      catch (IllegalArgumentException expected) {
+         checksRun++;
       }
    }
 
