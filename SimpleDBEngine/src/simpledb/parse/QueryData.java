@@ -1,17 +1,20 @@
 package simpledb.parse;
 
 import java.util.*;
+import static java.sql.Types.INTEGER;
 
 import simpledb.query.*;
+import simpledb.record.Schema;
 
 /**
  * Data for the SQL <i>select</i> statement.
  * @author Edward Sciore
  */
 public class QueryData {
-   private List<String> fields;
+   private List<SelectItem> selectItems;
    private Collection<String> tables;
    private Predicate pred;
+   private List<String> groupFields;
    private List<String> orderFields;
    private List<Boolean> orderDirections;
    
@@ -19,7 +22,7 @@ public class QueryData {
     * Saves the field and table list and predicate.
     */
    public QueryData(List<String> fields, Collection<String> tables, Predicate pred) {
-      this(fields, tables, pred,
+      this(toSelectItems(fields), tables, pred, new ArrayList<String>(),
            new ArrayList<String>(), new ArrayList<Boolean>());
    }
 
@@ -31,12 +34,29 @@ public class QueryData {
    public QueryData(List<String> fields, Collection<String> tables,
                     Predicate pred, List<String> orderFields,
                     List<Boolean> orderDirections) {
+      this(toSelectItems(fields), tables, pred, new ArrayList<String>(),
+           orderFields, orderDirections);
+   }
+
+   /** Creates query data from parsed typed SELECT items. */
+   public static QueryData withSelectItems(List<SelectItem> selectItems,
+         Collection<String> tables, Predicate pred, List<String> groupFields,
+         List<String> orderFields, List<Boolean> orderDirections) {
+      return new QueryData(selectItems, tables, pred, groupFields, orderFields,
+            orderDirections);
+   }
+
+   private QueryData(List<SelectItem> selectItems, Collection<String> tables,
+                     Predicate pred, List<String> groupFields,
+                     List<String> orderFields,
+                     List<Boolean> orderDirections) {
       if (orderFields.size() != orderDirections.size())
          throw new IllegalArgumentException(
                "Each ORDER BY field must have a direction");
-      this.fields = fields;
-      this.tables = tables;
+      this.selectItems = new ArrayList<SelectItem>(selectItems);
+      this.tables = new ArrayList<String>(tables);
       this.pred = pred;
+      this.groupFields = new ArrayList<String>(groupFields);
       this.orderFields = new ArrayList<String>(orderFields);
       this.orderDirections = new ArrayList<Boolean>(orderDirections);
    }
@@ -46,7 +66,15 @@ public class QueryData {
     * @return a list of field names
     */
    public List<String> fields() {
+      List<String> fields = new ArrayList<String>();
+      for (SelectItem item : selectItems)
+         fields.add(item.outputFieldName());
       return fields;
+   }
+
+   /** Returns the parsed SELECT items in their SQL order. */
+   public List<SelectItem> selectItems() {
+      return Collections.unmodifiableList(selectItems);
    }
    
    /**
@@ -64,6 +92,53 @@ public class QueryData {
     */
    public Predicate pred() {
       return pred;
+   }
+
+   /** Returns the fields that define each group, in sort-key order. */
+   public List<String> groupFields() {
+      return Collections.unmodifiableList(groupFields);
+   }
+
+   public boolean hasGroupBy() {
+      return !groupFields.isEmpty();
+   }
+
+   public boolean hasAggregates() {
+      for (SelectItem item : selectItems)
+         if (item.isAggregate())
+            return true;
+      return false;
+   }
+
+   /**
+    * Verifies aggregate and grouping semantics against the input relation.
+    * This does not construct aggregate operators; it gives planners a clear
+    * error before they attempt to project an expression as though it were a
+    * physical input field.
+    */
+   public void validateAgainst(Schema schema) {
+      for (String groupField : groupFields)
+         requireField(schema, groupField, "GROUP BY");
+
+      for (SelectItem item : selectItems) {
+         if (!item.isAggregate()) {
+            requireField(schema, item.fieldName(), "SELECT");
+            if (hasAggregates() && !groupFields.contains(item.fieldName()))
+               throw new IllegalArgumentException("Selected field "
+                     + item.fieldName() + " must appear in GROUP BY");
+            continue;
+         }
+
+         String argument = item.argument();
+         if (argument != null) {
+            requireField(schema, argument, item.aggregate().name());
+            if ((item.aggregate() == SelectItem.Aggregate.SUM
+                  || item.aggregate() == SelectItem.Aggregate.AVG)
+                  && schema.type(argument) != INTEGER)
+               throw new IllegalArgumentException(item.aggregate().name()
+                     + " requires an integer field: " + argument);
+         }
+      }
    }
 
    /**
@@ -92,8 +167,8 @@ public class QueryData {
    
    public String toString() {
       String result = "select ";
-      for (String fldname : fields)
-         result += fldname + ", ";
+      for (SelectItem item : selectItems)
+         result += item + ", ";
       result = result.substring(0, result.length()-2); //remove final comma
       result += " from ";
       for (String tblname : tables)
@@ -102,6 +177,12 @@ public class QueryData {
       String predstring = pred.toString();
       if (!predstring.equals(""))
          result += " where " + predstring;
+      if (hasGroupBy()) {
+         result += " group by ";
+         for (String fldname : groupFields)
+            result += fldname + ", ";
+         result = result.substring(0, result.length()-2);
+      }
       if (hasOrderBy()) {
          result += " order by ";
          for (int i = 0; i < orderFields.size(); i++) {
@@ -112,5 +193,19 @@ public class QueryData {
          result = result.substring(0, result.length()-2);
       }
       return result;
+   }
+
+   private static List<SelectItem> toSelectItems(List<String> fields) {
+      List<SelectItem> result = new ArrayList<SelectItem>();
+      for (String field : fields)
+         result.add(new SelectItem(field));
+      return result;
+   }
+
+   private static void requireField(Schema schema, String field,
+                                    String clause) {
+      if (!schema.hasField(field))
+         throw new IllegalArgumentException(clause + " field not found: "
+               + field);
    }
 }

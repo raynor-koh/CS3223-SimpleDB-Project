@@ -49,6 +49,11 @@ public class BetterQueryPlanner implements QueryPlanner {
       
       //Step 3: Add a selection plan for the predicate
       p = new SelectPlan(p, data.pred());
+
+      data.validateAgainst(p.schema());
+      if (data.hasAggregates() || data.hasGroupBy())
+         throw new UnsupportedOperationException(
+               "Aggregate and GROUP BY execution requires the aggregate operator implementation");
       
       //Step 4: Project on the field names
       p = new ProjectPlan(p, data.fields());

@@ -56,13 +56,19 @@ public class Parser {
    
    public QueryData query() {
       lex.eatKeyword("select");
-      List<String> fields = selectList();
+      List<SelectItem> selectItems = selectItemList();
       lex.eatKeyword("from");
       Collection<String> tables = tableList();
       Predicate pred = new Predicate();
       if (lex.matchKeyword("where")) {
          lex.eatKeyword("where");
          pred = predicate();
+      }
+      List<String> groupFields = new ArrayList<String>();
+      if (lex.matchKeyword("group")) {
+         lex.eatKeyword("group");
+         lex.eatKeyword("by");
+         groupFields = fieldList();
       }
       List<String> orderFields = new ArrayList<String>();
       List<Boolean> orderDirections = new ArrayList<Boolean>();
@@ -71,18 +77,50 @@ public class Parser {
          lex.eatKeyword("by");
          orderList(orderFields, orderDirections);
       }
-      return new QueryData(fields, tables, pred,
-                           orderFields, orderDirections);
+      return QueryData.withSelectItems(selectItems, tables, pred, groupFields,
+                                       orderFields, orderDirections);
    }
    
-   private List<String> selectList() {
-      List<String> L = new ArrayList<String>();
-      L.add(field());
+   private List<SelectItem> selectItemList() {
+      List<SelectItem> L = new ArrayList<SelectItem>();
+      L.add(selectItem());
       if (lex.matchDelim(',')) {
          lex.eatDelim(',');
-         L.addAll(selectList());
+         L.addAll(selectItemList());
       }
       return L;
+   }
+
+   private SelectItem selectItem() {
+      if (lex.matchId())
+         return new SelectItem(field());
+
+      SelectItem.Aggregate aggregate;
+      if (lex.matchKeyword("count"))
+         aggregate = SelectItem.Aggregate.COUNT;
+      else if (lex.matchKeyword("sum"))
+         aggregate = SelectItem.Aggregate.SUM;
+      else if (lex.matchKeyword("avg"))
+         aggregate = SelectItem.Aggregate.AVG;
+      else if (lex.matchKeyword("min"))
+         aggregate = SelectItem.Aggregate.MIN;
+      else if (lex.matchKeyword("max"))
+         aggregate = SelectItem.Aggregate.MAX;
+      else
+         throw new BadSyntaxException();
+
+      lex.eatKeyword(aggregate.name().toLowerCase());
+      lex.eatDelim('(');
+      String argument = null;
+      if (lex.matchDelim('*')) {
+         if (aggregate != SelectItem.Aggregate.COUNT)
+            throw new BadSyntaxException();
+         lex.eatDelim('*');
+      }
+      else
+         argument = field();
+      lex.eatDelim(')');
+      return new SelectItem(aggregate, argument);
    }
    
    private Collection<String> tableList() {

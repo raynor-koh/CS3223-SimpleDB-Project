@@ -43,6 +43,9 @@ public class BasicQueryPlanner implements QueryPlanner {
       
       //Step 3: Add a selection plan for the predicate
       p = new SelectPlan(p, data.pred());
+
+      data.validateAgainst(p.schema());
+      rejectUnimplementedAggregation(data);
       
       //Step 4: Project on the field names
       p = new ProjectPlan(p, data.fields());
@@ -52,5 +55,11 @@ public class BasicQueryPlanner implements QueryPlanner {
          p = new SortPlan(tx, p, data.orderFields(),
                           data.orderDirections());
       return p;
+   }
+
+   private static void rejectUnimplementedAggregation(QueryData data) {
+      if (data.hasAggregates() || data.hasGroupBy())
+         throw new UnsupportedOperationException(
+               "Aggregate and GROUP BY execution requires the aggregate operator implementation");
    }
 }

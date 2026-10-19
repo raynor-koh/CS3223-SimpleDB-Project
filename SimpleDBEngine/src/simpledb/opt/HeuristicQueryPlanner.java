@@ -49,6 +49,9 @@ public class HeuristicQueryPlanner implements QueryPlanner {
                 currentplan = getLowestProductPlan(currentplan);
         }
 
+        data.validateAgainst(currentplan.schema());
+        rejectUnimplementedAggregation(data);
+
         // Step 4. Project on the field names
         Plan result = new ProjectPlan(currentplan, data.fields());
 
@@ -105,5 +108,11 @@ public class HeuristicQueryPlanner implements QueryPlanner {
     public void setPlanner(Planner p) {
         // for use in planning views, which
         // for simplicity this code doesn't do.
+    }
+
+    private static void rejectUnimplementedAggregation(QueryData data) {
+        if (data.hasAggregates() || data.hasGroupBy())
+            throw new UnsupportedOperationException(
+                    "Aggregate and GROUP BY execution requires the aggregate operator implementation");
     }
 }
