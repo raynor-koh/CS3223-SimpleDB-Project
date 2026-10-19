@@ -168,3 +168,37 @@ SimpleDBEngine/studentdb/
 The direct `SimpleIJ` and the network server use separate database instances
 when they run from different project directories, even if both databases are
 named `studentdb`.
+
+## Lab 6 SQL extensions
+
+### `DISTINCT`
+
+Use `DISTINCT` immediately after `SELECT` to remove duplicate output rows.
+Duplicates are compared across every field in the select list.
+
+```sql
+select distinct majorid from student
+select distinct majorid, gradyear from student order by majorid, gradyear
+```
+
+`DISTINCT` is evaluated after projection and after any aggregation or grouping.
+It does not promise an output order by itself; add `ORDER BY` whenever the
+display order matters.
+
+### `EXPLAIN`
+
+Prefix a supported `SELECT` query with `EXPLAIN` in the direct `SimpleIJ`
+client to display its physical query plan:
+
+```sql
+explain select distinct majorid from student order by majorid desc
+```
+
+The output is a tree of physical operators with estimated block accesses and
+record counts. It is read-only: `EXPLAIN` builds and formats the plan but does
+not open a scan or execute the query. It supports the same query features as
+the engine's `SELECT` parser, including `DISTINCT`, `WHERE`, `GROUP BY`,
+aggregates, joins, and `ORDER BY`.
+
+`EXPLAIN` is currently available through `Planner.explain(...)` and the direct
+`SimpleIJ` client. It is not exposed as a JDBC `ResultSet` command.
