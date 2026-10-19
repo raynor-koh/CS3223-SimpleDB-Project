@@ -28,6 +28,22 @@ public class Planner {
       verifyQuery(data);
       return qplanner.createPlan(data, tx);
    }
+
+   /**
+    * Creates and formats the physical plan requested by an EXPLAIN command.
+    * The plan is not opened, so the underlying query is not executed.
+    *
+    * @param cmd an EXPLAIN command followed by a SELECT query
+    * @param tx the transaction used for planning
+    * @return a deterministic textual representation of the physical plan
+    */
+   public String explain(String cmd, Transaction tx) {
+      Parser parser = new Parser(cmd);
+      QueryData data = parser.explain();
+      verifyQuery(data);
+      Plan plan = qplanner.createPlan(data, tx);
+      return PlanExplainer.explain(plan);
+   }
    
    /**
     * Executes an SQL insert, delete, modify, or

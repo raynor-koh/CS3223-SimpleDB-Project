@@ -217,6 +217,8 @@ public class Lexer {
                                "order", "by", "asc", "desc",
                                // projection related keywords
                                "distinct",
+                               // plan-display related keywords
+                               "explain",
                                // grouping and aggregate related keywords
                                "group", "sum", "count", "avg", "min", "max");
    }

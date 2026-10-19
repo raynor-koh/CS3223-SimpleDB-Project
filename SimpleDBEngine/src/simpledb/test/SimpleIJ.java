@@ -1,6 +1,7 @@
 package simpledb.test;
 
 import java.sql.Types;
+import java.util.Locale;
 import java.util.Scanner;
 import simpledb.plan.Plan;
 import simpledb.plan.Planner;
@@ -19,9 +20,12 @@ public class SimpleIJ {
       while (sc.hasNextLine()) {
          // process one line of input
          String cmd = sc.nextLine().trim();
-         if (cmd.startsWith("exit"))
+         String keyword = cmd.toLowerCase(Locale.ROOT);
+         if (keyword.startsWith("exit"))
             break;
-         else if (cmd.startsWith("select"))
+         else if (keyword.startsWith("explain"))
+            doExplain(db, planner, cmd);
+         else if (keyword.startsWith("select"))
             doQuery(db, planner, cmd);
          else
             doUpdate(db, planner, cmd);
@@ -81,6 +85,19 @@ public class SimpleIJ {
       catch (RuntimeException e) {
          if (s != null)
             s.close();
+         tx.rollback();
+         System.out.println("SQL Exception: " + e.getMessage());
+      }
+   }
+
+   private static void doExplain(SimpleDB db, Planner planner, String cmd) {
+      Transaction tx = db.newTx();
+
+      try {
+         System.out.println(planner.explain(cmd, tx));
+         tx.commit();
+      }
+      catch (RuntimeException e) {
          tx.rollback();
          System.out.println("SQL Exception: " + e.getMessage());
       }

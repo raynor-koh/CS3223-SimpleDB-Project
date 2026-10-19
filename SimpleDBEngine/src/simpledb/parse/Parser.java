@@ -86,6 +86,14 @@ public class Parser {
                                        groupFields, orderFields,
                                        orderDirections);
    }
+
+   /**
+    * Parses an EXPLAIN command and returns the query whose plan is requested.
+    */
+   public QueryData explain() {
+      lex.eatKeyword("explain");
+      return query();
+   }
    
    private List<SelectItem> selectItemList() {
       List<SelectItem> L = new ArrayList<SelectItem>();
