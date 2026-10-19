@@ -215,6 +215,8 @@ public class Lexer {
                                "using", "hash", "btree",
                                // sorting related keywords
                                "order", "by", "asc", "desc",
+                               // projection related keywords
+                               "distinct",
                                // grouping and aggregate related keywords
                                "group", "sum", "count", "avg", "min", "max");
    }

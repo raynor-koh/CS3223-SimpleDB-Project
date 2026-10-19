@@ -11,6 +11,7 @@ import simpledb.record.Schema;
  * @author Edward Sciore
  */
 public class QueryData {
+   private boolean distinct;
    private List<SelectItem> selectItems;
    private Collection<String> tables;
    private Predicate pred;
@@ -22,7 +23,7 @@ public class QueryData {
     * Saves the field and table list and predicate.
     */
    public QueryData(List<String> fields, Collection<String> tables, Predicate pred) {
-      this(toSelectItems(fields), tables, pred, new ArrayList<String>(),
+      this(false, toSelectItems(fields), tables, pred, new ArrayList<String>(),
            new ArrayList<String>(), new ArrayList<Boolean>());
    }
 
@@ -34,7 +35,7 @@ public class QueryData {
    public QueryData(List<String> fields, Collection<String> tables,
                     Predicate pred, List<String> orderFields,
                     List<Boolean> orderDirections) {
-      this(toSelectItems(fields), tables, pred, new ArrayList<String>(),
+      this(false, toSelectItems(fields), tables, pred, new ArrayList<String>(),
            orderFields, orderDirections);
    }
 
@@ -42,17 +43,28 @@ public class QueryData {
    public static QueryData withSelectItems(List<SelectItem> selectItems,
          Collection<String> tables, Predicate pred, List<String> groupFields,
          List<String> orderFields, List<Boolean> orderDirections) {
-      return new QueryData(selectItems, tables, pred, groupFields, orderFields,
-            orderDirections);
+      return withSelectItems(false, selectItems, tables, pred, groupFields,
+            orderFields, orderDirections);
    }
 
-   private QueryData(List<SelectItem> selectItems, Collection<String> tables,
+   /** Creates query data from parsed typed SELECT items and DISTINCT state. */
+   public static QueryData withSelectItems(boolean distinct,
+         List<SelectItem> selectItems, Collection<String> tables,
+         Predicate pred, List<String> groupFields, List<String> orderFields,
+         List<Boolean> orderDirections) {
+      return new QueryData(distinct, selectItems, tables, pred, groupFields,
+            orderFields, orderDirections);
+   }
+
+   private QueryData(boolean distinct, List<SelectItem> selectItems,
+                     Collection<String> tables,
                      Predicate pred, List<String> groupFields,
                      List<String> orderFields,
                      List<Boolean> orderDirections) {
       if (orderFields.size() != orderDirections.size())
          throw new IllegalArgumentException(
                "Each ORDER BY field must have a direction");
+      this.distinct = distinct;
       this.selectItems = new ArrayList<SelectItem>(selectItems);
       this.tables = new ArrayList<String>(tables);
       this.pred = pred;
@@ -75,6 +87,11 @@ public class QueryData {
    /** Returns the parsed SELECT items in their SQL order. */
    public List<SelectItem> selectItems() {
       return Collections.unmodifiableList(selectItems);
+   }
+
+   /** Returns whether the SELECT clause requests duplicate elimination. */
+   public boolean isDistinct() {
+      return distinct;
    }
    
    /**
@@ -166,7 +183,7 @@ public class QueryData {
    }
    
    public String toString() {
-      String result = "select ";
+      String result = distinct ? "select distinct " : "select ";
       for (SelectItem item : selectItems)
          result += item + ", ";
       result = result.substring(0, result.length()-2); //remove final comma
