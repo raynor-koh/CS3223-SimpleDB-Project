@@ -104,4 +104,16 @@ public class GroupByPlan implements Plan {
    public Schema schema() {
       return sch;
    }
+
+   public String operationDescription() {
+      List<String> aggregateFields = new ArrayList<String>();
+      for (AggregationFn fn : aggfns)
+         aggregateFields.add(fn.fieldName());
+      return "GroupBy(fields=" + groupfields + ", aggregates="
+            + aggregateFields + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.singletonList(p);
+   }
 }

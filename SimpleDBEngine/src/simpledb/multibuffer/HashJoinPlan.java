@@ -1,5 +1,8 @@
 package simpledb.multibuffer;
 
+import java.util.Arrays;
+import java.util.List;
+
 import simpledb.plan.Plan;
 import simpledb.query.Scan;
 import simpledb.record.Schema;
@@ -62,6 +65,14 @@ public class HashJoinPlan implements Plan {
 
    public Schema schema() {
       return schema;
+   }
+
+   public String operationDescription() {
+      return "HashJoin(leftKey=" + lhsKey + ", rightKey=" + rhsKey + ")";
+   }
+
+   public List<Plan> children() {
+      return Arrays.asList(lhs, rhs);
    }
 
    private static int clamp(long value) {

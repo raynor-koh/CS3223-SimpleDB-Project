@@ -1,6 +1,7 @@
 package simpledb.materialize;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import simpledb.plan.Plan;
@@ -58,5 +59,13 @@ public class DistinctPlan implements Plan {
    /** Returns the input schema unchanged. */
    public Schema schema() {
       return p.schema();
+   }
+
+   public String operationDescription() {
+      return "Distinct(fields=" + fields + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.<Plan>singletonList(sorted);
    }
 }

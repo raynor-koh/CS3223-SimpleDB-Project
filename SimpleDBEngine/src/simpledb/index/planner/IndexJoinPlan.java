@@ -1,5 +1,8 @@
 package simpledb.index.planner;
 
+import java.util.Arrays;
+import java.util.List;
+
 import simpledb.record.*;
 import simpledb.query.*;
 import simpledb.metadata.IndexInfo;
@@ -87,5 +90,13 @@ public class IndexJoinPlan implements Plan {
     */
    public Schema schema() {
       return sch;
+   }
+
+   public String operationDescription() {
+      return "IndexJoin(outerField=" + joinfield + ")";
+   }
+
+   public List<Plan> children() {
+      return Arrays.asList(p1, p2);
    }
 }
