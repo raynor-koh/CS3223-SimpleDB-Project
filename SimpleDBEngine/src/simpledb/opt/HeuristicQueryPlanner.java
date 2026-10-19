@@ -2,6 +2,7 @@ package simpledb.opt;
 
 import java.util.*;
 import simpledb.tx.Transaction;
+import simpledb.materialize.DistinctPlan;
 import simpledb.materialize.SortPlan;
 import simpledb.metadata.MetadataMgr;
 import simpledb.parse.QueryData;
@@ -55,7 +56,11 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         // Step 5. Project on the field names
         Plan result = new ProjectPlan(currentplan, data.fields());
 
-        // Step 6. Sort only when the query has an ORDER BY clause
+        // Step 6. Eliminate duplicate projected rows when requested.
+        if (data.isDistinct())
+            result = new DistinctPlan(tx, result);
+
+        // Step 7. Sort only when the query has an ORDER BY clause
         if (data.hasOrderBy())
             result = new SortPlan(tx, result, data.orderFields(),
                     data.orderDirections());

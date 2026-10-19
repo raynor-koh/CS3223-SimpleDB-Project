@@ -50,7 +50,11 @@ public class BasicQueryPlanner implements QueryPlanner {
       //Step 5: Project on the field names
       p = new ProjectPlan(p, data.fields());
 
-      //Step 6: Sort only when the query has an ORDER BY clause
+      // Step 6: Eliminate duplicate projected rows when requested.
+      if (data.isDistinct())
+         p = new DistinctPlan(tx, p);
+
+      //Step 7: Sort only when the query has an ORDER BY clause
       if (data.hasOrderBy())
          p = new SortPlan(tx, p, data.orderFields(),
                           data.orderDirections());
