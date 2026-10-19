@@ -29,12 +29,12 @@ public class GroupByPlan implements Plan {
     */
    public GroupByPlan(Transaction tx, Plan p, List<String> groupfields, List<AggregationFn> aggfns) {
       this.p = new SortPlan(tx, p, groupfields);
-      this.groupfields = groupfields;
-      this.aggfns = aggfns;
+      this.groupfields = new ArrayList<String>(groupfields);
+      this.aggfns = new ArrayList<AggregationFn>(aggfns);
       for (String fldname : groupfields)
          sch.add(fldname, p.schema());
       for (AggregationFn fn : aggfns)
-         sch.addIntField(fn.fieldName());
+         fn.addFieldTo(sch, p.schema());
    }
    
    /**
@@ -67,9 +67,15 @@ public class GroupByPlan implements Plan {
     * @see simpledb.plan.Plan#recordsOutput()
     */
    public int recordsOutput() {
+      if (groupfields.isEmpty())
+         return p.recordsOutput() == 0 ? 0 : 1;
       int numgroups = 1;
-      for (String fldname : groupfields)
-         numgroups *= p.distinctValues(fldname);
+      for (String fldname : groupfields) {
+         long next = (long) numgroups * p.distinctValues(fldname);
+         if (next > Integer.MAX_VALUE)
+            return Integer.MAX_VALUE;
+         numgroups = (int) next;
+      }
       return numgroups;
    }
    
@@ -83,7 +89,7 @@ public class GroupByPlan implements Plan {
     * @see simpledb.plan.Plan#distinctValues(java.lang.String)
     */
    public int distinctValues(String fldname) {
-      if (p.schema().hasField(fldname))
+      if (groupfields.contains(fldname))
          return p.distinctValues(fldname);
       else
          return recordsOutput();

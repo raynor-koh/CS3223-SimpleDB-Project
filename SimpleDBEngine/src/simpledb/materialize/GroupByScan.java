@@ -23,8 +23,8 @@ public class GroupByScan implements Scan {
     */
    public GroupByScan(Scan s, List<String> groupfields, List<AggregationFn> aggfns) {
       this.s = s;
-      this.groupfields = groupfields;
-      this.aggfns = aggfns;
+      this.groupfields = new ArrayList<String>(groupfields);
+      this.aggfns = new ArrayList<AggregationFn>(aggfns);
       beforeFirst();
    }
    
