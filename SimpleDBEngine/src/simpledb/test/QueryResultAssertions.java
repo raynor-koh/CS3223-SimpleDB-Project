@@ -26,6 +26,11 @@ final class QueryResultAssertions {
     }
 
     static Map<List<Object>, Integer> readBag(Plan plan, List<String> fields) {
+        return bag(readRows(plan, fields));
+    }
+
+    /** Reads the complete typed sequence; use only ORDER BY to assert its order. */
+    static List<List<Object>> readRows(Plan plan, List<String> fields) {
         List<List<Object>> rows = new ArrayList<>();
         Scan scan = plan.open();
         try {
@@ -41,7 +46,14 @@ final class QueryResultAssertions {
         } finally {
             scan.close();
         }
-        return bag(rows);
+        return rows;
+    }
+
+    static void assertSequenceEquals(String context, List<List<Object>> expected,
+                                      List<List<Object>> actual) {
+        if (!expected.equals(actual))
+            throw new AssertionError(context + "\nExpected tuple sequence: " + expected
+                    + "\nActual tuple sequence: " + actual);
     }
 
     static void assertBagEquals(String context, Map<List<Object>, Integer> expected,

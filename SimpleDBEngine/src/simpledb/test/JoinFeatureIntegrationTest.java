@@ -1,6 +1,7 @@
 package simpledb.test;
 
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -9,15 +10,21 @@ import java.util.function.Predicate;
 import simpledb.index.planner.IndexJoinPlan;
 import simpledb.index.planner.IndexUpdatePlanner;
 import simpledb.materialize.MergeJoinPlan;
+import simpledb.materialize.DistinctPlan;
+import simpledb.materialize.GroupByPlan;
+import simpledb.materialize.SortPlan;
 import simpledb.multibuffer.HashJoinPlan;
 import simpledb.multibuffer.MultibufferProductPlan;
 import simpledb.opt.HeuristicQueryPlanner;
 import simpledb.opt.JoinMethod;
 import simpledb.opt.JoinPolicy;
+import simpledb.parse.Parser;
+import simpledb.parse.QueryData;
 import simpledb.plan.NestedLoopJoinPlan;
 import simpledb.plan.Plan;
 import simpledb.plan.PlanExplainer;
 import simpledb.plan.Planner;
+import simpledb.plan.ProjectPlan;
 import simpledb.server.SimpleDB;
 import simpledb.tx.Transaction;
 
@@ -85,6 +92,103 @@ public class JoinFeatureIntegrationTest {
                 " and aid < dscore and bid < 104",
                 row -> number(row, "aid") < number(row, "dscore")
                     && number(row, "bid") < 104, 4);
+        testFinalStages(db, tx, policy, method);
+    }
+
+    private static void testFinalStages(SimpleDB db, Transaction tx, JoinPolicy policy, JoinMethod method) {
+        String from = " from l7a, l7b where ak = bk";
+        String aggregates = "count(*), sum(blimit), avg(blimit), min(blimit), max(blimit)";
+        // Both A groups join the same three B values [4, 2, 1]. Preserve
+        // multiplicity: global count/sum are 6/14, not 3/7.
+        verifyFinalQuery(db, tx, policy, method, "select " + aggregates + from, 1,
+                rows(new Object[] {6, 14, 2, 1, 4}));
+        verifyFinalQuery(db, tx, policy, method,
+                "select agrp, " + aggregates + from + " group by agrp", 1,
+                rows(new Object[] {1, 3, 7, 2, 1, 4}, new Object[] {2, 3, 7, 2, 1, 4}));
+        // Dropping the grouping key leaves two identical complete tuples.
+        // DISTINCT must collapse those final tuples, not the aggregate inputs.
+        verifyFinalQuery(db, tx, policy, method,
+                "select " + aggregates + from + " group by agrp", 1,
+                rows(new Object[] {3, 7, 2, 1, 4}, new Object[] {3, 7, 2, 1, 4}));
+        verifyFinalQuery(db, tx, policy, method,
+                "select distinct " + aggregates + from + " group by agrp", 1,
+                rows(new Object[] {3, 7, 2, 1, 4}));
+
+        // Every primary sort key has ties, so the secondary direction matters.
+        String grouped = "select aid, bg, " + aggregates + from + " group by aid, bg";
+        verifyFinalQuery(db, tx, policy, method, grouped + " order by aid asc, bg desc", 1,
+                rows(new Object[] {1, 2, 1, 2, 2, 2, 2}, new Object[] {1, 1, 2, 5, 2, 1, 4},
+                     new Object[] {2, 2, 1, 2, 2, 2, 2}, new Object[] {2, 1, 2, 5, 2, 1, 4}));
+        verifyFinalQuery(db, tx, policy, method, grouped + " order by aid desc, bg asc", 1,
+                rows(new Object[] {2, 1, 2, 5, 2, 1, 4}, new Object[] {2, 2, 1, 2, 2, 2, 2},
+                     new Object[] {1, 1, 2, 5, 2, 1, 4}, new Object[] {1, 2, 1, 2, 2, 2, 2}));
+        verifyFinalQuery(db, tx, policy, method, grouped
+                + " order by countofall desc, aid asc, bg desc", 1,
+                rows(new Object[] {1, 1, 2, 5, 2, 1, 4}, new Object[] {2, 1, 2, 5, 2, 1, 4},
+                     new Object[] {1, 2, 1, 2, 2, 2, 2}, new Object[] {2, 2, 1, 2, 2, 2, 2}));
+
+        verifyFinalQuery(db, tx, policy, method,
+                "select bg, " + aggregates + from + " group by aid, bg", 1,
+                rows(new Object[] {1, 2, 5, 2, 1, 4}, new Object[] {1, 2, 5, 2, 1, 4},
+                     new Object[] {2, 1, 2, 2, 2, 2}, new Object[] {2, 1, 2, 2, 2, 2}));
+        verifyFinalQuery(db, tx, policy, method,
+                "select distinct bg, " + aggregates + from
+                + " group by aid, bg order by countofall desc, bg asc", 1,
+                rows(new Object[] {1, 2, 5, 2, 1, 4}, new Object[] {2, 1, 2, 2, 2, 2}));
+
+        verifyFinalQuery(db, tx, policy, method,
+                "select distinct bg, agrp" + from + " order by bg desc, agrp asc", 1,
+                rows(new Object[] {2, 1}, new Object[] {2, 2}, new Object[] {1, 1}, new Object[] {1, 2}));
+        verifyFinalQuery(db, tx, policy, method,
+                "select aid, blimit" + from + " order by aid asc, blimit desc", 1,
+                rows(new Object[] {1, 4}, new Object[] {1, 2}, new Object[] {1, 1},
+                     new Object[] {2, 4}, new Object[] {2, 2}, new Object[] {2, 1}));
+
+        String fourFrom = " from " + JoinFeatureFixture.FOUR_FROM
+                + " where " + JoinFeatureFixture.FOUR_JOIN;
+        String fourAggregates = "count(*), sum(dscore), avg(dscore), min(dscore), max(dscore)";
+        verifyFinalQuery(db, tx, policy, method, "select " + fourAggregates + fourFrom, 3,
+                rows(new Object[] {14, 24, 1, 1, 2}));
+        verifyFinalQuery(db, tx, policy, method,
+                "select distinct " + fourAggregates + fourFrom + " group by agrp", 3,
+                rows(new Object[] {7, 12, 1, 1, 2}));
+    }
+
+    private static void verifyFinalQuery(SimpleDB db, Transaction tx, JoinPolicy policy,
+            JoinMethod method, String sql, int joinCount, List<List<Object>> expected) {
+        QueryData data = new Parser(sql).query();
+        Plan plan = planner(db, policy).createQueryPlan(sql, tx);
+        assertOperators(plan, method, joinCount);
+        // Verify the physical final-stage order as well as the actual answers.
+        Plan stage = plan;
+        if (data.hasOrderBy()) {
+            check(stage instanceof SortPlan, "ORDER BY must be the final stage: " + sql);
+            stage = stage.children().get(0);
+        }
+        if (data.isDistinct()) {
+            check(stage instanceof DistinctPlan, "DISTINCT must follow projection: " + sql);
+            // Distinct exposes its sorting child, then that child's input.
+            stage = stage.children().get(0).children().get(0);
+        }
+        check(stage instanceof ProjectPlan, "Final projection must precede DISTINCT/order: " + sql);
+        if (data.hasAggregates())
+            check(stage.children().get(0) instanceof GroupByPlan,
+                    "Grouping/aggregation must precede final projection: " + sql);
+        List<List<Object>> actual = QueryResultAssertions.readRows(plan, data.fields());
+        QueryResultAssertions.assertBagEquals(policy.allowedMethods() + ": " + sql,
+                QueryResultAssertions.bag(expected), QueryResultAssertions.bag(actual));
+        checks++;
+        if (data.hasOrderBy()) {
+            QueryResultAssertions.assertSequenceEquals(policy.allowedMethods() + ": " + sql, expected, actual);
+            checks++;
+        }
+    }
+
+    private static List<List<Object>> rows(Object[]... tuples) {
+        List<List<Object>> rows = new ArrayList<>();
+        for (Object[] tuple : tuples)
+            rows.add(Arrays.asList(tuple));
+        return rows;
     }
 
     private static void verify(SimpleDB db, Transaction tx, JoinPolicy policy, JoinMethod method,
