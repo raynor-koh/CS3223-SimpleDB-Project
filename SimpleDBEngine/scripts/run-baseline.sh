@@ -48,6 +48,7 @@ tests=(
     simpledb.opt.JoinIntegrationTest
     simpledb.opt.JoinPolicyIntegrationTest
     simpledb.test.JoinFeatureIntegrationTest
+    simpledb.test.QueryResourceIntegrationTest
     simpledb.multibuffer.HashJoinIntegrationTest
     simpledb.materialize.AggregateIntegrationTest
     simpledb.materialize.DistinctPlanTest

@@ -151,7 +151,10 @@ public class HashJoinScan implements Scan {
          }
          if (buildBlocks > buildBlockLimit()) {
             fallbackScan = nestedLoopPair(pair);
-            continue;
+            // Hand this partition to next() before considering another pair.
+            // Continuing here skips the final fallback pair (or overwrites an
+            // earlier fallback scan without consuming or closing it).
+            return true;
          }
 
          buildIsLeft = leftBuild;

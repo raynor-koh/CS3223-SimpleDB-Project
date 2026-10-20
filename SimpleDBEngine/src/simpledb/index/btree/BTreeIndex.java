@@ -35,7 +35,11 @@ public class BTreeIndex implements Index {
       if (tx.size(leaftbl) == 0) {
          BlockId blk = tx.append(leaftbl);
          BTPage node = new BTPage(tx, blk, leafLayout);
-         node.format(blk, -1);
+         try {
+            node.format(blk, -1);
+         } finally {
+            node.close();
+         }
       }
 
       // deal with the directory
