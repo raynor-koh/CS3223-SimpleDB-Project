@@ -42,7 +42,7 @@ class TablePlanner {
         this(tblname, mypred, tx, mdm, JoinPolicy.defaultPolicy());
     }
 
-    /** Stores per-instance configuration; method enforcement is added separately. */
+    /** Configures eligible join algorithms without changing their preference order. */
     public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm,
                         JoinPolicy joinPolicy) {
         this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
@@ -68,10 +68,10 @@ class TablePlanner {
 
     /**
      * Constructs a join plan of the specified plan
-     * and the table. The plan will use an indexjoin, if possible.
+     * and the table. The plan prefers an eligible indexjoin, if allowed.
      * (Which means that if an indexselect is also possible,
      * the indexjoin operator takes precedence.)
-     * The method returns null if no join is possible.
+     * Returns null if no connecting predicate or no allowed algorithm is eligible.
      * 
      * @param current the specified plan
      * @return a join plan of the plan and this table
@@ -85,22 +85,29 @@ class TablePlanner {
             return null;
 
         // Prefer an index join when the new table has a usable index.
-        Plan p = makeIndexJoin(current, currsch);
+        Plan p = null;
+        if (joinPolicy.allows(JoinMethod.INDEX))
+            p = makeIndexJoin(current, currsch);
 
         // Otherwise, use a partitioned hash join for an equality join.
-        if (p == null)
+        if (p == null && joinPolicy.allows(JoinMethod.HASH))
             p = makeHashJoin(current, currsch);
 
         // With too few available buffers for hash partitioning, retain the
         // existing sort-merge equality fallback.
-        if (p == null)
+        if (p == null && joinPolicy.allows(JoinMethod.MERGE))
             p = makeMergeJoin(current, currsch);
 
         // Any remaining join predicate uses nested loops.
-        if (p == null)
+        if (p == null && joinPolicy.allows(JoinMethod.NESTED_LOOP))
             p = makeNestedLoopJoin(current, currsch);
 
         return p;
+    }
+
+    /** Distinguishes a disconnected table from an unavailable restricted join. */
+    boolean hasJoinPredicate(Plan current) {
+        return mypred.joinSubPred(myschema, current.schema()) != null;
     }
 
     /**
@@ -111,6 +118,9 @@ class TablePlanner {
      * @return a product plan of the specified plan and this table
      */
     public Plan makeProductPlan(Plan current) {
+        if (hasJoinPredicate(current))
+            throw new IllegalStateException("Cannot replace a connected join with a product; "
+                    + "allowed join methods: " + joinPolicy.allowedMethods());
         Plan p = addSelectPred(myplan);
         trace("cross product");
         return new MultibufferProductPlan(tx, current, p);
@@ -121,7 +131,7 @@ class TablePlanner {
             Constant val = mypred.equatesWithConstant(fldname);
             if (val != null) {
                 IndexInfo ii = indexes.get(fldname);
-                System.out.println("index on " + fldname + " used");
+                trace("index on " + fldname + " used");
                 return new IndexSelectPlan(myplan, ii, val);
             }
         }

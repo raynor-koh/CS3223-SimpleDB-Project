@@ -8,8 +8,9 @@ import java.util.Set;
 
 /**
  * Immutable eligibility configuration for joins, independent of method priority.
- * This configuration is currently passed through planners; candidate enforcement
- * is a separate implementation step.
+ * Planners retain their existing preference order among allowed methods.
+ * Eligibility is still required; this policy does not force a relation order.
+ * Hash joins can internally fall back to nested loops on skewed partitions.
  */
 public final class JoinPolicy {
     private static final JoinPolicy DEFAULT =

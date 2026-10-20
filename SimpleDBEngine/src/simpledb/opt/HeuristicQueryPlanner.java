@@ -22,7 +22,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         this(mdm, JoinPolicy.defaultPolicy());
     }
 
-    /** Stores per-instance configuration; method enforcement is added separately. */
+    /** Configures eligible join algorithms without changing their preference order. */
     public HeuristicQueryPlanner(MetadataMgr mdm, JoinPolicy joinPolicy) {
         this.mdm = mdm;
         this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
@@ -104,6 +104,15 @@ public class HeuristicQueryPlanner implements QueryPlanner {
     }
 
     private Plan getLowestProductPlan(Plan current) {
+        // A null join candidate may mean the policy excludes every eligible
+        // method, rather than that this is a genuinely disconnected product.
+        for (TablePlanner tp : tableplanners) {
+            if (tp.hasJoinPredicate(current))
+                throw new IllegalStateException("No eligible join for the current plan; "
+                        + "allowed join methods: " + joinPolicy.allowedMethods()
+                        + ". Check equality keys, inner indexes, available buffers, "
+                        + "and the heuristic join order.");
+        }
         TablePlanner besttp = null;
         Plan bestplan = null;
         for (TablePlanner tp : tableplanners) {

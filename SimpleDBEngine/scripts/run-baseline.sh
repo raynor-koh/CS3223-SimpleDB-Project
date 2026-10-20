@@ -46,6 +46,7 @@ tests=(
     simpledb.index.TypedIndexIntegrationTest
     simpledb.materialize.OrderByIntegrationTest
     simpledb.opt.JoinIntegrationTest
+    simpledb.opt.JoinPolicyIntegrationTest
     simpledb.multibuffer.HashJoinIntegrationTest
     simpledb.materialize.AggregateIntegrationTest
     simpledb.materialize.DistinctPlanTest
