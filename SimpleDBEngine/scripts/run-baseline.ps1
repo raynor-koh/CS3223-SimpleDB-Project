@@ -8,24 +8,62 @@ if ($args.Count -ne 0) {
 
 try {
     $projectDir = Split-Path -Parent $PSScriptRoot
-    $java = (Get-Command java -CommandType Application -ErrorAction Stop).Source
-    $javac = (Get-Command javac -CommandType Application -ErrorAction Stop).Source
+    # Get-Command can return several installations. ProcessStartInfo needs
+    # one executable path, not an array converted to a space-separated string.
+    $java = (Get-Command java.exe -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1).Source
+    $javac = (Get-Command javac.exe -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1).Source
     $runDir = Join-Path ([System.IO.Path]::GetTempPath()) (
         'simpledb-baseline-' + [guid]::NewGuid().ToString('N'))
     $classesDir = Join-Path $runDir 'classes'
     $logsDir = Join-Path $runDir 'logs'
     New-Item -ItemType Directory -Path $classesDir, $logsDir -Force | Out-Null
     Write-Host "Baseline artifacts: $runDir"
+    Write-Host "Java: $java"
+    Write-Host "Compiler: $javac"
 
-    # Windows PowerShell treats native stderr specially; use cmd redirection
-    # so Java warnings and version output are captured without aborting the run.
+    # Launch Java directly so executable paths containing spaces work, and
+    # capture stderr without Windows PowerShell treating it as a script error.
     function Invoke-LoggedJavaTool {
         param([string]$Executable, [string[]]$ToolArguments, [string]$LogPath)
-        $quotedArguments = @($ToolArguments | ForEach-Object { '"' + $_ + '"' })
-        $command = '""' + $Executable + '" ' + ($quotedArguments -join ' ') +
-            ' > "' + $LogPath + '" 2>&1"'
-        & $env:ComSpec /d /s /c $command
-        return $LASTEXITCODE
+        if (-not (Test-Path -LiteralPath $Executable -PathType Leaf)) {
+            throw "Executable does not exist: $Executable"
+        }
+        # ProcessStartInfo.Arguments also works with Windows PowerShell 5.1.
+        # Escape quotes and trailing backslashes using Windows argument rules.
+        $quotedArguments = @($ToolArguments | ForEach-Object {
+            $escaped = $_ -replace '(\\*)"', '$1$1\"'
+            $escaped = $escaped -replace '(\\+)$', '$1$1'
+            '"' + $escaped + '"'
+        })
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $Executable
+        $startInfo.Arguments = $quotedArguments -join ' '
+        $startInfo.WorkingDirectory = (Get-Location).ProviderPath
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $startInfo
+        try {
+            try {
+                [void]$process.Start()
+            } catch {
+                throw "Could not launch '$Executable' in '$($startInfo.WorkingDirectory)': $_"
+            }
+            # Drain both streams concurrently to avoid pipe-buffer deadlocks.
+            $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+            $stderrTask = $process.StandardError.ReadToEndAsync()
+            $process.WaitForExit()
+            $stdout = $stdoutTask.GetAwaiter().GetResult()
+            $stderr = $stderrTask.GetAwaiter().GetResult()
+            [System.IO.File]::WriteAllText($LogPath, $stdout + $stderr)
+            return $process.ExitCode
+        } finally {
+            $process.Dispose()
+        }
     }
 
     $javaVersionLog = Join-Path $runDir 'java-version.log'
