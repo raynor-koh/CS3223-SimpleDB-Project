@@ -16,9 +16,16 @@ import simpledb.plan.*;
 public class HeuristicQueryPlanner implements QueryPlanner {
     private Collection<TablePlanner> tableplanners = new ArrayList<>();
     private MetadataMgr mdm;
+    private final JoinPolicy joinPolicy;
 
     public HeuristicQueryPlanner(MetadataMgr mdm) {
+        this(mdm, JoinPolicy.defaultPolicy());
+    }
+
+    /** Stores per-instance configuration; method enforcement is added separately. */
+    public HeuristicQueryPlanner(MetadataMgr mdm, JoinPolicy joinPolicy) {
         this.mdm = mdm;
+        this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
     }
 
     /**
@@ -34,7 +41,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
 
         // Step 1: Create a TablePlanner object for each mentioned table
         for (String tblname : data.tables()) {
-            TablePlanner tp = new TablePlanner(tblname, data.pred(), tx, mdm);
+            TablePlanner tp = new TablePlanner(tblname, data.pred(), tx, mdm, joinPolicy);
             tableplanners.add(tp);
         }
 

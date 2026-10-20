@@ -1,6 +1,7 @@
 package simpledb.opt;
 
 import java.util.Map;
+import java.util.Objects;
 import simpledb.tx.Transaction;
 import simpledb.record.*;
 import simpledb.query.*;
@@ -24,6 +25,7 @@ class TablePlanner {
     private Schema myschema;
     private Map<String, IndexInfo> indexes;
     private Transaction tx;
+    private final JoinPolicy joinPolicy;
 
     /**
      * Creates a new table planner.
@@ -37,6 +39,13 @@ class TablePlanner {
      * @param tx      the calling transaction
      */
     public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm) {
+        this(tblname, mypred, tx, mdm, JoinPolicy.defaultPolicy());
+    }
+
+    /** Stores per-instance configuration; method enforcement is added separately. */
+    public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm,
+                        JoinPolicy joinPolicy) {
+        this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
         this.mypred = mypred;
         this.tx = tx;
         myplan = new TablePlan(tx, tblname, mdm);
