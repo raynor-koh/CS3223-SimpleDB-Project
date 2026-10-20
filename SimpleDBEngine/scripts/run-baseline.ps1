@@ -104,6 +104,7 @@ try {
         'simpledb.test.JoinFeatureIntegrationTest'
         'simpledb.test.QueryResourceIntegrationTest'
         'simpledb.test.IndexedUpdateAggregateIntegrationTest'
+        'simpledb.test.AggregateSemanticsIntegrationTest'
         'simpledb.multibuffer.HashJoinIntegrationTest'
         'simpledb.materialize.AggregateIntegrationTest'
         'simpledb.materialize.DistinctPlanTest'

@@ -64,6 +64,18 @@ public class AggregateParserTest {
       expectInvalidSemantics("select count(missing) from course", schema);
       expectInvalidSemantics("select sum(credits) from course group by missing",
             schema);
+      expectInvalidSemantics("select name from course group by dept", schema);
+      expectInvalidSemantics("select dept, name from course group by dept", schema);
+      expectInvalidSemantics("select distinct name from course group by dept", schema);
+      expectInvalidSemantics("select dept, credits from course group by dept, name", schema);
+      expectInvalidSemantics("select name from course group by missing", schema);
+      for (String sql : Arrays.asList(
+            "select dept from course group by dept",
+            "select name from course group by dept, name",
+            "select name from course")) {
+         new Parser(sql).query().validateAgainst(schema);
+         checksRun++;
+      }
 
       System.out.println("All " + checksRun
             + " aggregate parser checks passed.");

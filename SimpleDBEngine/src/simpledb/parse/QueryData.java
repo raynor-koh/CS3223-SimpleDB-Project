@@ -134,13 +134,14 @@ public class QueryData {
     * physical input field.
     */
    public void validateAgainst(Schema schema) {
+      boolean groupedQuery = hasAggregates() || hasGroupBy();
       for (String groupField : groupFields)
          requireField(schema, groupField, "GROUP BY");
 
       for (SelectItem item : selectItems) {
          if (!item.isAggregate()) {
             requireField(schema, item.fieldName(), "SELECT");
-            if (hasAggregates() && !groupFields.contains(item.fieldName()))
+            if (groupedQuery && !groupFields.contains(item.fieldName()))
                throw new IllegalArgumentException("Selected field "
                      + item.fieldName() + " must appear in GROUP BY");
             continue;
