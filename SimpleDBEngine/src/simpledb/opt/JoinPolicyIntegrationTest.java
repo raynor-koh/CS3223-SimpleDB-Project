@@ -45,7 +45,120 @@ public class JoinPolicyIntegrationTest {
             tx.rollback();
             throw e;
         }
+        testMultiTableContinuation();
         System.out.println("All " + checks + " join-policy integration checks passed.");
+    }
+
+    private static void testMultiTableContinuation() throws Exception {
+        String directory = Files.createTempDirectory("simpledb-policy-continuation-")
+                .resolve("database").toString();
+        SimpleDB seed = new SimpleDB(directory);
+        Transaction setup = seed.newTx();
+        try {
+            for (String sql : Arrays.asList(
+                    "create table polstart(aid int, akey int)",
+                    "create table polblocked(bid int, bkey int, bound int)",
+                    "create table polbridge(cid int, ckey int)",
+                    "create table polfree(fid int)",
+                    "create index pol_bkey on polblocked(bkey) using hash",
+                    "create index pol_ckey on polbridge(ckey) using btree",
+                    "insert into polstart(aid, akey) values (1, 2)",
+                    "insert into polblocked(bid, bkey, bound) values (10, 2, 3)",
+                    "insert into polblocked(bid, bkey, bound) values (11, 2, 1)",
+                    "insert into polblocked(bid, bkey, bound) values (12, 9, 9)",
+                    "insert into polbridge(cid, ckey) values (20, 2)",
+                    "insert into polbridge(cid, ckey) values (21, 2)",
+                    "insert into polfree(fid) values (99)",
+                    "insert into polfree(fid) values (100)")) {
+                seed.planner().executeUpdate(sql, setup);
+            }
+            setup.commit();
+        } catch (RuntimeException | Error e) {
+            setup.rollback();
+            throw e;
+        }
+
+        // Reopening refreshes statistics: A has 1 row, B has 3, C has 2.
+        // A is therefore the first relation regardless of cached insert stats.
+        SimpleDB db = new SimpleDB(directory);
+        Transaction tx = db.newTx();
+        String query = "select aid, bid, cid from polstart, polblocked, polbridge "
+                + "where aid < bound and akey = ckey and ckey = bkey";
+        try {
+            for (JoinMethod method : Arrays.asList(JoinMethod.INDEX, JoinMethod.HASH, JoinMethod.MERGE)) {
+                JoinPolicy policy = JoinPolicy.only(method);
+                QueryData data = new Parser(query).query();
+                Plan start = new TablePlanner("polstart", data.pred(), tx, db.mdMgr(), policy)
+                        .makeSelectPlan();
+                TablePlanner blocked = new TablePlanner("polblocked", data.pred(), tx, db.mdMgr(), policy);
+                check(blocked.hasJoinPredicate(start) && blocked.makeJoinPlan(start) == null,
+                        "B must be connected but initially unusable under " + method);
+
+                Plan result = plan(db, tx, policy, query);
+                assertJoinCounts(result, method, 2);
+                check(hasJoinWithoutField(result, planClass(method), "bid"),
+                        "Planner must skip B, join A to C, then revisit B");
+                assertRows(result, Arrays.asList("aid", "bid", "cid"), "1:10:20", "1:10:21");
+
+                // Removing C = B leaves B ineligible even after A joins C.
+                // Adding an unrelated relation must not allow a product bypass.
+                String impossible = "select aid, bid, cid, fid "
+                        + "from polstart, polblocked, polbridge, polfree "
+                        + "where aid < bound and akey = ckey";
+                Planner reusable = new Planner(new HeuristicQueryPlanner(db.mdMgr(), policy),
+                        new IndexUpdatePlanner(db.mdMgr()));
+                try {
+                    reusable.createQueryPlan(impossible, tx);
+                    throw new AssertionError("Expected no compliant continuation under " + method);
+                } catch (IllegalStateException expected) {
+                    String message = expected.getMessage();
+                    check(message.contains("allowed join methods: " + policy.allowedMethods()),
+                            "Failure must identify allowed methods");
+                    check(message.contains("polblocked") && message.contains("aid<bound"),
+                            "Failure must identify the blocked relation and connecting predicate");
+                    check(message.contains("current fields:") && message.contains("cid"),
+                            "Failure must describe the partial plan after joining C");
+                }
+                // A failed planning attempt must not poison the next query.
+                Plan recovered = reusable.createQueryPlan(query, tx);
+                assertRows(recovered, Arrays.asList("aid", "bid", "cid"), "1:10:20", "1:10:21");
+
+                Plan product = plan(db, tx, policy,
+                        "select aid, fid from polstart, polfree");
+                assertJoinCounts(product, method, 0);
+                check(countNodes(product, MultibufferProductPlan.class) == 1,
+                        "A true disconnected product must remain supported under " + method);
+                assertRows(product, Arrays.asList("aid", "fid"), "1:99", "1:100");
+
+                Plan mixed = plan(db, tx, policy,
+                        "select aid, bid, cid, fid from polstart, polblocked, polbridge, polfree "
+                        + "where aid < bound and akey = ckey and ckey = bkey");
+                assertJoinCounts(mixed, method, 2);
+                check(countNodes(mixed, MultibufferProductPlan.class) == 1,
+                        "A disconnected component must combine with the compliant join chain");
+                assertRows(mixed, Arrays.asList("aid", "bid", "cid", "fid"),
+                        "1:10:20:99", "1:10:20:100", "1:10:21:99", "1:10:21:100");
+            }
+            tx.commit();
+        } catch (RuntimeException | Error e) {
+            tx.rollback();
+            throw e;
+        }
+    }
+
+    private static boolean hasJoinWithoutField(Plan plan, Class<?> type, String field) {
+        if (type.isInstance(plan) && !plan.schema().hasField(field))
+            return true;
+        for (Plan child : plan.children())
+            if (hasJoinWithoutField(child, type, field))
+                return true;
+        return false;
+    }
+
+    private static void assertJoinCounts(Plan plan, JoinMethod method, int expected) {
+        for (JoinMethod candidate : JoinMethod.values())
+            check(countNodes(plan, planClass(candidate)) == (candidate == method ? expected : 0),
+                    "Unexpected physical joins under " + method + ":\n" + PlanExplainer.explain(plan));
     }
 
     private static void createFixture(Planner planner, Transaction tx) {

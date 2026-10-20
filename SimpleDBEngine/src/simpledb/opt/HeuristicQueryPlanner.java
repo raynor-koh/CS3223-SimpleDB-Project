@@ -93,6 +93,8 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         Plan bestplan = null;
         for (TablePlanner tp : tableplanners) {
             Plan plan = tp.makeJoinPlan(current);
+            // An unavailable candidate may become eligible after another join.
+            // Search every remaining relation before deciding progress is blocked.
             if (plan != null && (bestplan == null || plan.recordsOutput() < bestplan.recordsOutput())) {
                 besttp = tp;
                 bestplan = plan;
@@ -106,13 +108,18 @@ public class HeuristicQueryPlanner implements QueryPlanner {
     private Plan getLowestProductPlan(Plan current) {
         // A null join candidate may mean the policy excludes every eligible
         // method, rather than that this is a genuinely disconnected product.
+        List<String> blocked = new ArrayList<>();
         for (TablePlanner tp : tableplanners) {
             if (tp.hasJoinPredicate(current))
-                throw new IllegalStateException("No eligible join for the current plan; "
-                        + "allowed join methods: " + joinPolicy.allowedMethods()
-                        + ". Check equality keys, inner indexes, available buffers, "
-                        + "and the heuristic join order.");
+                blocked.add(tp.joinDescription(current));
         }
+        if (!blocked.isEmpty())
+            throw new IllegalStateException("No compliant join continuation for the current plan; "
+                    + "allowed join methods: " + joinPolicy.allowedMethods()
+                    + "; current fields: " + current.schema().fields()
+                    + "; blocked relations: " + blocked
+                    + ". Check equality keys, inner indexes, available buffers, "
+                    + "and the heuristic join order. This planner does not backtrack join orders.");
         TablePlanner besttp = null;
         Plan bestplan = null;
         for (TablePlanner tp : tableplanners) {

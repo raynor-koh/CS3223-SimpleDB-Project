@@ -26,6 +26,7 @@ class TablePlanner {
     private Map<String, IndexInfo> indexes;
     private Transaction tx;
     private final JoinPolicy joinPolicy;
+    private final String tableName;
 
     /**
      * Creates a new table planner.
@@ -46,6 +47,7 @@ class TablePlanner {
     public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm,
                         JoinPolicy joinPolicy) {
         this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
+        this.tableName = tblname;
         this.mypred = mypred;
         this.tx = tx;
         myplan = new TablePlan(tx, tblname, mdm);
@@ -110,6 +112,12 @@ class TablePlanner {
         return mypred.joinSubPred(myschema, current.schema()) != null;
     }
 
+    /** Identifies the relation and connecting terms when a policy blocks progress. */
+    String joinDescription(Plan current) {
+        return tableName + " (predicate="
+                + mypred.joinSubPred(myschema, current.schema()) + ")";
+    }
+
     /**
      * Constructs a product plan of the specified plan and
      * this table.
@@ -120,7 +128,8 @@ class TablePlanner {
     public Plan makeProductPlan(Plan current) {
         if (hasJoinPredicate(current))
             throw new IllegalStateException("Cannot replace a connected join with a product; "
-                    + "allowed join methods: " + joinPolicy.allowedMethods());
+                    + "allowed join methods: " + joinPolicy.allowedMethods()
+                    + "; blocked relation: " + joinDescription(current));
         Plan p = addSelectPred(myplan);
         trace("cross product");
         return new MultibufferProductPlan(tx, current, p);
