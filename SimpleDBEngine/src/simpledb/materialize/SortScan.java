@@ -18,6 +18,8 @@ public class SortScan implements Scan {
    private RecordComparator comp;
    private boolean hasmore1, hasmore2=false;
    private List<RID> savedposition;
+   private UpdateScan savedCurrentScan;
+   private boolean savedHasMore1, savedHasMore2;
    
    /**
     * Create a sort scan, given a list of 1 or 2 runs.
@@ -47,6 +49,8 @@ public class SortScan implements Scan {
     */
    public void beforeFirst() {
       currentscan = null;
+      savedposition = null;
+      savedCurrentScan = null;
       if (s1 == null)
          return;
       s1.beforeFirst();
@@ -140,20 +144,30 @@ public class SortScan implements Scan {
     * so that it can be restored at a later time.
     */
    public void savePosition() {
-      RID rid1 = (s1 == null) ? null : s1.getRid();
-      RID rid2 = (s2 == null) ? null : s2.getRid();
+      RID rid1 = hasmore1 ? s1.getRid() : null;
+      RID rid2 = hasmore2 ? s2.getRid() : null;
       savedposition = Arrays.asList(rid1,rid2);
+      savedCurrentScan = currentscan;
+      savedHasMore1 = hasmore1;
+      savedHasMore2 = hasmore2;
    }
    
    /**
     * Move the scan to its previously-saved position.
     */
    public void restorePosition() {
+      if (savedposition == null)
+         throw new IllegalStateException("No saved sort position");
       RID rid1 = savedposition.get(0);
       RID rid2 = savedposition.get(1);
       if (rid1 != null)
          s1.moveToRid(rid1);
       if (rid2 != null)
          s2.moveToRid(rid2);
+      // The merge can exhaust or switch runs after saving a duplicate group.
+      // Restore the selected run and its availability as well as the RIDs.
+      currentscan = savedCurrentScan;
+      hasmore1 = savedHasMore1;
+      hasmore2 = savedHasMore2;
    }
 }

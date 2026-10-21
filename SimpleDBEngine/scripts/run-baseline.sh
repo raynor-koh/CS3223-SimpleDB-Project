@@ -46,8 +46,10 @@ tests=(
     simpledb.parse.QueryValidationParserTest
     simpledb.plan.QueryValidationIntegrationTest
     simpledb.index.TypedIndexIntegrationTest
+    simpledb.index.IndexBackfillIntegrationTest
     simpledb.materialize.OrderByIntegrationTest
     simpledb.opt.JoinIntegrationTest
+    simpledb.materialize.MergeJoinRewindIntegrationTest
     simpledb.opt.JoinPolicyIntegrationTest
     simpledb.test.JoinFeatureIntegrationTest
     simpledb.test.QueryResourceIntegrationTest

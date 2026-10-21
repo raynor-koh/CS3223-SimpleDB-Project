@@ -43,6 +43,7 @@ public class MergeJoinScan implements Scan {
     * @see simpledb.query.Scan#beforeFirst()
     */
    public void beforeFirst() {
+      joinval = null;
       s1.beforeFirst();
       s2.beforeFirst();
    }
