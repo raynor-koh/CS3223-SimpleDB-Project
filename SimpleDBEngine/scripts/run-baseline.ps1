@@ -97,6 +97,8 @@ try {
         'simpledb.parse.AggregateParserTest'
         'simpledb.parse.DistinctParserTest'
         'simpledb.parse.ExplainParserTest'
+        'simpledb.parse.QueryValidationParserTest'
+        'simpledb.plan.QueryValidationIntegrationTest'
         'simpledb.index.TypedIndexIntegrationTest'
         'simpledb.materialize.OrderByIntegrationTest'
         'simpledb.opt.JoinIntegrationTest'
