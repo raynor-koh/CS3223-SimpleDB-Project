@@ -105,6 +105,8 @@ try {
         'simpledb.test.QueryResourceIntegrationTest'
         'simpledb.test.IndexedUpdateAggregateIntegrationTest'
         'simpledb.test.AggregateSemanticsIntegrationTest'
+        'simpledb.test.TimeTypeIntegrationTest'
+        'simpledb.test.TimeTypeRegressionTest'
         'simpledb.multibuffer.HashJoinIntegrationTest'
         'simpledb.materialize.AggregateIntegrationTest'
         'simpledb.materialize.DistinctPlanTest'

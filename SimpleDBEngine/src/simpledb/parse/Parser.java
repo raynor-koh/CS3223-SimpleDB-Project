@@ -287,7 +287,10 @@ public class Parser {
    
    private Schema fieldType(String fldname) {
       Schema schema = new Schema();
-      if (lex.matchKeyword("int")) {
+      if (lex.matchKeyword("time")) {
+         lex.eatKeyword("time");
+         schema.addTimeField(fldname);
+      } else if (lex.matchKeyword("int")) {
          lex.eatKeyword("int");
          schema.addIntField(fldname);
       }

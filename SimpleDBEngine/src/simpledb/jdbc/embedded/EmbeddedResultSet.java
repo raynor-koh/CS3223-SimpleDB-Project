@@ -1,8 +1,11 @@
 package simpledb.jdbc.embedded;
 
 import java.sql.*;
+import java.time.LocalTime;
+import java.util.Locale;
 import simpledb.record.Schema;
 import simpledb.query.Scan;
+import simpledb.query.Constant;
 import simpledb.plan.Plan;
 import simpledb.jdbc.ResultSetAdapter;
 
@@ -63,9 +66,70 @@ public class EmbeddedResultSet extends ResultSetAdapter {
    public String getString(String fldname) throws SQLException {
       try {
          fldname = fldname.toLowerCase(); // to ensure case-insensitivity
+         if (sch.type(fldname) == java.sql.Types.TIME)
+            return s.getVal(fldname).toString();
          return s.getString(fldname);
       }
       catch(RuntimeException e) {
+         conn.rollback();
+         throw new SQLException(e);
+      }
+   }
+
+   public Time getTime(String columnLabel) throws SQLException {
+      LocalTime value = getObject(columnLabel, LocalTime.class);
+      Time legacy = Time.valueOf(value);
+      legacy.setTime(legacy.getTime() + value.getNano() / 1000000);
+      return legacy;
+   }
+
+   public Time getTime(int columnIndex) throws SQLException {
+      return getTime(columnName(columnIndex));
+   }
+
+   public <T> T getObject(String columnLabel, Class<T> type) throws SQLException {
+      if (type == null) throw new SQLException("Requested Java type cannot be null");
+      String name = columnName(columnLabel);
+      if (sch.type(name) == java.sql.Types.TIME && type == LocalTime.class)
+         return type.cast(columnValue(name).asLocalTime());
+      if (type == Time.class) return type.cast(getTime(name));
+      if (type == String.class) return type.cast(getString(name));
+      throw new SQLException("Unsupported typed object request: " + type.getName());
+   }
+
+   public <T> T getObject(int columnIndex, Class<T> type) throws SQLException {
+      return getObject(columnName(columnIndex), type);
+   }
+
+   public Object getObject(String columnLabel) throws SQLException {
+      String name = columnName(columnLabel);
+      Constant value = columnValue(name);
+      if (sch.type(name) == java.sql.Types.TIME) return value.asLocalTime();
+      if (sch.type(name) == java.sql.Types.INTEGER) return value.asInt();
+      return value.asString();
+   }
+
+   public Object getObject(int columnIndex) throws SQLException {
+      return getObject(columnName(columnIndex));
+   }
+
+   private String columnName(String label) throws SQLException {
+      if (label == null) throw new SQLException("Column label cannot be null");
+      String name = label.toLowerCase(Locale.ROOT);
+      if (!sch.hasField(name)) throw new SQLException("Unknown column: " + label);
+      return name;
+   }
+
+   private String columnName(int index) throws SQLException {
+      if (index < 1 || index > sch.fields().size())
+         throw new SQLException("Column index out of range: " + index);
+      return sch.fields().get(index - 1);
+   }
+
+   private Constant columnValue(String name) throws SQLException {
+      try {
+         return s.getVal(name);
+      } catch (RuntimeException e) {
          conn.rollback();
          throw new SQLException(e);
       }

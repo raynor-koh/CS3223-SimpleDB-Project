@@ -24,6 +24,7 @@ public class NestedLoopJoinPlan implements Plan {
 
         schema.addAll(lhs.schema());
         schema.addAll(rhs.schema());
+        joinPred.validateTimeTypes(schema);
     }
 
     @Override

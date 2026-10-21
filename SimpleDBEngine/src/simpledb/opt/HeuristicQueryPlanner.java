@@ -38,12 +38,15 @@ public class HeuristicQueryPlanner implements QueryPlanner {
      */
     public Plan createPlan(QueryData data, Transaction tx) {
         tableplanners.clear();
+        simpledb.record.Schema inputSchema = new simpledb.record.Schema();
 
         // Step 1: Create a TablePlanner object for each mentioned table
         for (String tblname : data.tables()) {
             TablePlanner tp = new TablePlanner(tblname, data.pred(), tx, mdm, joinPolicy);
             tableplanners.add(tp);
+            inputSchema.addAll(tp.schema());
         }
+        data.pred().validateTimeTypes(inputSchema);
 
         // Step 2: Choose the lowest-size plan to begin the join order
         Plan currentplan = getLowestSelectPlan();

@@ -73,7 +73,7 @@ public class RemoteMetaDataImpl extends UnicastRemoteObject implements RemoteMet
    public int getColumnDisplaySize(int column) throws RemoteException {
       String fldname = getColumnName(column);
       int fldtype = sch.type(fldname);
-      int fldlength = (fldtype == INTEGER) ? 6 : sch.length(fldname);
+      int fldlength = (fldtype == INTEGER) ? 6 : (fldtype == java.sql.Types.TIME ? 15 : sch.length(fldname));
       return Math.max(fldname.length(), fldlength) + 1;
    }
 }

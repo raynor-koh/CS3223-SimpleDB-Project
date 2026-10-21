@@ -135,10 +135,16 @@ class TablePlanner {
         return new MultibufferProductPlan(tx, current, p);
     }
 
+    public Schema schema() {
+        return myschema;
+    }
+
     private Plan makeIndexSelect() {
         for (String fldname : indexes.keySet()) {
             Constant val = mypred.equatesWithConstant(fldname);
             if (val != null) {
+                if (myschema.type(fldname) == java.sql.Types.TIME && !val.isTime())
+                    val = Constant.time(val.asString());
                 IndexInfo ii = indexes.get(fldname);
                 trace("index on " + fldname + " used");
                 return new IndexSelectPlan(myplan, ii, val);

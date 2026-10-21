@@ -36,6 +36,11 @@ public class Schema {
    public void addIntField(String fldname) {
       addField(fldname, INTEGER, 0);
    }
+
+   /** Add a SQL TIME field (microseconds since midnight). */
+   public void addTimeField(String fldname) {
+      addField(fldname, TIME, 0);
+   }
    
    /**
     * Add a string field to the schema.

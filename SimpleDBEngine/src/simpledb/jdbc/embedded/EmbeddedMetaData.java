@@ -48,6 +48,28 @@ public class EmbeddedMetaData extends ResultSetMetaDataAdapter {
       String fldname = getColumnName(column);
       return sch.type(fldname);
    }
+
+   public String getColumnTypeName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.TIME) return "TIME";
+      if (type == INTEGER) return "INTEGER";
+      return "VARCHAR";
+   }
+
+   public String getColumnClassName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.TIME) return java.time.LocalTime.class.getName();
+      if (type == INTEGER) return Integer.class.getName();
+      return String.class.getName();
+   }
+
+   public int getPrecision(int column) throws SQLException {
+      return getColumnType(column) == java.sql.Types.TIME ? 15 : getColumnDisplaySize(column);
+   }
+
+   public int getScale(int column) throws SQLException {
+      return getColumnType(column) == java.sql.Types.TIME ? 6 : 0;
+   }
    
    /**
     * Returns the number of characters required to display the
@@ -63,7 +85,7 @@ public class EmbeddedMetaData extends ResultSetMetaDataAdapter {
    public int getColumnDisplaySize(int column) throws SQLException {
       String fldname = getColumnName(column);
       int fldtype = sch.type(fldname);
-      int fldlength = (fldtype == INTEGER) ? 6 : sch.length(fldname);
+      int fldlength = (fldtype == INTEGER) ? 6 : (fldtype == java.sql.Types.TIME ? 15 : sch.length(fldname));
       return Math.max(fldname.length(), fldlength) + 1;
    }
 }

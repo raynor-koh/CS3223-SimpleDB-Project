@@ -23,6 +23,7 @@ public class SelectPlan implements Plan {
     * @param pred the predicate
     */
    public SelectPlan(Plan p, Predicate pred) {
+      pred.validateTimeTypes(p.schema());
       this.p = p;
       this.pred = pred;
    }

@@ -1,6 +1,6 @@
 package simpledb.index.btree;
 
-import static java.sql.Types.INTEGER;
+import static java.sql.Types.*;
 import simpledb.file.BlockId;
 import simpledb.tx.Transaction;
 import simpledb.record.*;
@@ -130,8 +130,12 @@ public class BTPage {
          int offset = layout.offset(fldname);
          if (layout.schema().type(fldname) == INTEGER)
             tx.setInt(blk, pos + offset, 0, false);
-         else
+         else if (layout.schema().type(fldname) == TIME)
+            tx.setLong(blk, pos + offset, 0L, false);
+         else if (layout.schema().type(fldname) == VARCHAR)
             tx.setString(blk, pos + offset, "", false);
+         else
+            throw new IllegalArgumentException("Unsupported B-tree field type: " + layout.schema().type(fldname));
       }
    }
    // Methods called only by BTreeDir
@@ -217,8 +221,11 @@ public class BTPage {
       int type = layout.schema().type(fldname);
       if (type == INTEGER)
          return new Constant(getInt(slot, fldname));
-      else
+      if (type == TIME)
+         return Constant.fromTimeMicros(tx.getLong(currentblk, fldpos(slot, fldname)));
+      else if (type == VARCHAR)
          return new Constant(getString(slot, fldname));
+      throw new IllegalArgumentException("Unsupported B-tree key type: " + type);
    }
    
    private void setInt(int slot, String fldname, int val) {
@@ -235,8 +242,12 @@ public class BTPage {
       int type = layout.schema().type(fldname);
       if (type == INTEGER)
          setInt(slot, fldname, val.asInt());
-      else
+      else if (type == TIME)
+         tx.setLong(currentblk, fldpos(slot, fldname), val.asTimeMicros(), true);
+      else if (type == VARCHAR)
          setString(slot, fldname, val.asString());
+      else
+         throw new IllegalArgumentException("Unsupported B-tree key type: " + type);
    }
    
    private void setNumRecs(int n) {

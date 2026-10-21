@@ -69,6 +69,8 @@ class RemoteResultSetImpl extends UnicastRemoteObject implements RemoteResultSet
    public String getString(String fldname) throws RemoteException {
 		try {
 	      fldname = fldname.toLowerCase(); // to ensure case-insensitivity
+	      if (sch.type(fldname) == java.sql.Types.TIME)
+	         return s.getVal(fldname).toString();
 	      return s.getString(fldname);
       }
       catch(RuntimeException e) {

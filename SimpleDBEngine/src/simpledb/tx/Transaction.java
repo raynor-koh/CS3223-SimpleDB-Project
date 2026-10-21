@@ -116,6 +116,12 @@ public class Transaction {
       Buffer buff = mybuffers.getBuffer(blk);
       return buff.contents().getInt(offset);
    }
+
+   public long getLong(BlockId blk, int offset) {
+      concurMgr.sLock(blk);
+      Buffer buff = mybuffers.getBuffer(blk);
+      return buff.contents().getLong(offset);
+   }
    
    /**
     * Return the string value stored at the
@@ -154,6 +160,13 @@ public class Transaction {
       Page p = buff.contents();
       p.setInt(offset, val);
       buff.setModified(txnum, lsn);
+   }
+
+   /** Store a long as two logged integer updates so undo/redo uses the
+    * existing recovery record format. */
+   public void setLong(BlockId blk, int offset, long val, boolean okToLog) {
+      setInt(blk, offset, (int) (val >>> 32), okToLog);
+      setInt(blk, offset + Integer.BYTES, (int) val, okToLog);
    }
    
    /**

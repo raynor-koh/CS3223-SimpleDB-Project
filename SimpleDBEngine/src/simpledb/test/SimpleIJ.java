@@ -49,7 +49,7 @@ public class SimpleIJ {
          for (int i=0; i<numcols; i++) {
             String fldname = sch.fields().get(i);
             int fldtype = sch.type(fldname);
-            int fldlength = (fldtype == Types.INTEGER) ? 6 : sch.length(fldname);
+            int fldlength = (fldtype == Types.INTEGER) ? 6 : (fldtype == Types.TIME ? 15 : sch.length(fldname));
             int width = Math.max(fldname.length(), fldlength) + 1;
             totalwidth += width;
             String fmt = "%" + width + "s";
@@ -65,14 +65,16 @@ public class SimpleIJ {
             for (int i=0; i<numcols; i++) {
                String fldname = sch.fields().get(i);
                int fldtype = sch.type(fldname);
-               int fldlength = (fldtype == Types.INTEGER) ? 6 : sch.length(fldname);
+               int fldlength = (fldtype == Types.INTEGER) ? 6 : (fldtype == Types.TIME ? 15 : sch.length(fldname));
                int width = Math.max(fldname.length(), fldlength) + 1;
                String fmt = "%" + width;
                if (fldtype == Types.INTEGER) {
                   int ival = s.getInt(fldname);
                   System.out.format(fmt + "d", ival);
                }
-               else {
+               else if (fldtype == Types.TIME) {
+                  System.out.format(fmt + "s", s.getVal(fldname).toString());
+               } else {
                   String sval = s.getString(fldname);
                   System.out.format(fmt + "s", sval);
                }

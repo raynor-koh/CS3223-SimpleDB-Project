@@ -42,6 +42,28 @@ public class NetworkMetaData extends ResultSetMetaDataAdapter {
          throw new SQLException(e);
       }
    }
+
+   public String getColumnTypeName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.TIME) return "TIME";
+      if (type == java.sql.Types.INTEGER) return "INTEGER";
+      return "VARCHAR";
+   }
+
+   public String getColumnClassName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.TIME) return java.time.LocalTime.class.getName();
+      if (type == java.sql.Types.INTEGER) return Integer.class.getName();
+      return String.class.getName();
+   }
+
+   public int getPrecision(int column) throws SQLException {
+      return getColumnType(column) == java.sql.Types.TIME ? 15 : getColumnDisplaySize(column);
+   }
+
+   public int getScale(int column) throws SQLException {
+      return getColumnType(column) == java.sql.Types.TIME ? 6 : 0;
+   }
    
    public int getColumnDisplaySize(int column) throws SQLException {
       try {
