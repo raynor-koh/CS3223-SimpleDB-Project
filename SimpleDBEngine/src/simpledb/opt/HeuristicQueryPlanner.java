@@ -6,6 +6,7 @@ import simpledb.materialize.DistinctPlan;
 import simpledb.materialize.SortPlan;
 import simpledb.metadata.MetadataMgr;
 import simpledb.parse.QueryData;
+import simpledb.parse.Parser;
 import simpledb.plan.*;
 
 /**
@@ -14,7 +15,6 @@ import simpledb.plan.*;
  * @author Edward Sciore
  */
 public class HeuristicQueryPlanner implements QueryPlanner {
-    private Collection<TablePlanner> tableplanners = new ArrayList<>();
     private MetadataMgr mdm;
     private final JoinPolicy joinPolicy;
 
@@ -37,27 +37,35 @@ public class HeuristicQueryPlanner implements QueryPlanner {
      * results in the smallest output.
      */
     public Plan createPlan(QueryData data, Transaction tx) {
-        tableplanners.clear();
+        new QueryValidator(mdm).validate(data, tx);
+        Collection<TablePlanner> tableplanners = new ArrayList<>();
         simpledb.record.Schema inputSchema = new simpledb.record.Schema();
 
         // Step 1: Create a TablePlanner object for each mentioned table
         for (String tblname : data.tables()) {
-            TablePlanner tp = new TablePlanner(tblname, data.pred(), tx, mdm, joinPolicy);
+            String viewdef = mdm.getViewDef(tblname, tx);
+            TablePlanner tp;
+            if (viewdef == null) {
+                tp = new TablePlanner(tblname, data.pred(), tx, mdm, joinPolicy);
+            } else {
+                Plan view = createPlan(new Parser(viewdef).query(), tx);
+                tp = new TablePlanner(tblname, view, data.pred(), tx, joinPolicy);
+            }
             tableplanners.add(tp);
             inputSchema.addAll(tp.schema());
         }
         data.pred().validateTimeTypes(inputSchema);
 
         // Step 2: Choose the lowest-size plan to begin the join order
-        Plan currentplan = getLowestSelectPlan();
+        Plan currentplan = getLowestSelectPlan(tableplanners);
 
         // Step 3: Repeatedly add a plan to the join order
         while (!tableplanners.isEmpty()) {
-            Plan p = getLowestJoinPlan(currentplan);
+            Plan p = getLowestJoinPlan(currentplan, tableplanners);
             if (p != null)
                 currentplan = p;
             else // no applicable join
-                currentplan = getLowestProductPlan(currentplan);
+                currentplan = getLowestProductPlan(currentplan, tableplanners);
         }
 
         // Step 4. Group and aggregate before projecting result fields.
@@ -77,7 +85,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         return result;
     }
 
-    private Plan getLowestSelectPlan() {
+    private Plan getLowestSelectPlan(Collection<TablePlanner> tableplanners) {
         TablePlanner besttp = null;
         Plan bestplan = null;
         for (TablePlanner tp : tableplanners) {
@@ -91,7 +99,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         return bestplan;
     }
 
-    private Plan getLowestJoinPlan(Plan current) {
+    private Plan getLowestJoinPlan(Plan current, Collection<TablePlanner> tableplanners) {
         TablePlanner besttp = null;
         Plan bestplan = null;
         for (TablePlanner tp : tableplanners) {
@@ -108,7 +116,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
         return bestplan;
     }
 
-    private Plan getLowestProductPlan(Plan current) {
+    private Plan getLowestProductPlan(Plan current, Collection<TablePlanner> tableplanners) {
         // A null join candidate may mean the policy excludes every eligible
         // method, rather than that this is a genuinely disconnected product.
         List<String> blocked = new ArrayList<>();
@@ -137,8 +145,7 @@ public class HeuristicQueryPlanner implements QueryPlanner {
     }
 
     public void setPlanner(Planner p) {
-        // for use in planning views, which
-        // for simplicity this code doesn't do.
+        // Retained for existing callers; views use this planner recursively.
     }
 
 }

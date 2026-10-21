@@ -55,6 +55,7 @@ public class Parser {
 // Methods for parsing queries
    
    public QueryData query() {
+      lex.setClause("SELECT");
       lex.eatKeyword("select");
       boolean distinct = false;
       if (lex.matchKeyword("distinct")) {
@@ -62,15 +63,18 @@ public class Parser {
          distinct = true;
       }
       List<SelectItem> selectItems = selectItemList();
+      lex.setClause("FROM");
       lex.eatKeyword("from");
       Collection<String> tables = tableList();
       Predicate pred = new Predicate();
       if (lex.matchKeyword("where")) {
+         lex.setClause("WHERE");
          lex.eatKeyword("where");
          pred = predicate();
       }
       List<String> groupFields = new ArrayList<String>();
       if (lex.matchKeyword("group")) {
+         lex.setClause("GROUP BY");
          lex.eatKeyword("group");
          lex.eatKeyword("by");
          groupFields = fieldList();
@@ -78,10 +82,12 @@ public class Parser {
       List<String> orderFields = new ArrayList<String>();
       List<Boolean> orderDirections = new ArrayList<Boolean>();
       if (lex.matchKeyword("order")) {
+         lex.setClause("ORDER BY");
          lex.eatKeyword("order");
          lex.eatKeyword("by");
          orderList(orderFields, orderDirections);
       }
+      requireEnd();
       return QueryData.withSelectItems(distinct, selectItems, tables, pred,
                                        groupFields, orderFields,
                                        orderDirections);
@@ -91,8 +97,14 @@ public class Parser {
     * Parses an EXPLAIN command and returns the query whose plan is requested.
     */
    public QueryData explain() {
+      lex.setClause("EXPLAIN");
       lex.eatKeyword("explain");
       return query();
+   }
+
+   private void requireEnd() {
+      if (!lex.matchEnd())
+         throw lex.syntaxError("end of statement");
    }
    
    private List<SelectItem> selectItemList() {
@@ -121,14 +133,14 @@ public class Parser {
       else if (lex.matchKeyword("max"))
          aggregate = SelectItem.Aggregate.MAX;
       else
-         throw new BadSyntaxException();
+         throw lex.syntaxError("SELECT field or aggregate");
 
       lex.eatKeyword(aggregate.name().toLowerCase());
       lex.eatDelim('(');
       String argument = null;
       if (lex.matchDelim('*')) {
          if (aggregate != SelectItem.Aggregate.COUNT)
-            throw new BadSyntaxException();
+            throw lex.syntaxError("field argument for " + aggregate.name());
          lex.eatDelim('*');
       }
       else
@@ -172,17 +184,21 @@ public class Parser {
 // Methods for parsing the various update commands
    
    public Object updateCmd() {
+      Object result;
       if (lex.matchKeyword("insert"))
-         return insert();
+         result = insert();
       else if (lex.matchKeyword("delete"))
-         return delete();
+         result = delete();
       else if (lex.matchKeyword("update"))
-         return modify();
+         result = modify();
       else
-         return create();
+         result = create();
+      requireEnd();
+      return result;
    }
    
    private Object create() {
+      lex.setClause("CREATE");
       lex.eatKeyword("create");
       if (lex.matchKeyword("table"))
          return createTable();
@@ -195,11 +211,13 @@ public class Parser {
 // Method for parsing delete commands
    
    public DeleteData delete() {
+      lex.setClause("DELETE FROM");
       lex.eatKeyword("delete");
       lex.eatKeyword("from");
       String tblname = lex.eatId();
       Predicate pred = new Predicate();
       if (lex.matchKeyword("where")) {
+         lex.setClause("WHERE");
          lex.eatKeyword("where");
          pred = predicate();
       }
@@ -209,12 +227,14 @@ public class Parser {
 // Methods for parsing insert commands
    
    public InsertData insert() {
+      lex.setClause("INSERT INTO");
       lex.eatKeyword("insert");
       lex.eatKeyword("into");
       String tblname = lex.eatId();
       lex.eatDelim('(');
       List<String> flds = fieldList();
       lex.eatDelim(')');
+      lex.setClause("VALUES");
       lex.eatKeyword("values");
       lex.eatDelim('(');
       List<Constant> vals = constList();
@@ -245,14 +265,17 @@ public class Parser {
 // Method for parsing modify commands
    
    public ModifyData modify() {
+      lex.setClause("UPDATE");
       lex.eatKeyword("update");
       String tblname = lex.eatId();
+      lex.setClause("SET");
       lex.eatKeyword("set");
       String fldname = field();
       lex.eatDelim('=');
       Expression newval = expression();
       Predicate pred = new Predicate();
       if (lex.matchKeyword("where")) {
+         lex.setClause("WHERE");
          lex.eatKeyword("where");
          pred = predicate();
       }
@@ -262,6 +285,7 @@ public class Parser {
 // Method for parsing create table commands
    
    public CreateTableData createTable() {
+      lex.setClause("CREATE TABLE");
       lex.eatKeyword("table");
       String tblname = lex.eatId();
       lex.eatDelim('(');
@@ -307,6 +331,7 @@ public class Parser {
 // Method for parsing create view commands
    
    public CreateViewData createView() {
+      lex.setClause("CREATE VIEW");
       lex.eatKeyword("view");
       String viewname = lex.eatId();
       lex.eatKeyword("as");
@@ -318,6 +343,7 @@ public class Parser {
 //  Method for parsing create index commands
    
    public CreateIndexData createIndex() {
+      lex.setClause("CREATE INDEX");
       lex.eatKeyword("index");
       String idxname = lex.eatId();
       lex.eatKeyword("on");
@@ -338,7 +364,7 @@ public class Parser {
             lex.eatKeyword("btree");
             return new CreateIndexData(idxname, tblname, fldname, "btree");
         } else {
-            throw new BadSyntaxException();
+            throw lex.syntaxError("index type 'hash' or 'btree'");
         }
       }
       return new CreateIndexData(idxname, tblname, fldname);

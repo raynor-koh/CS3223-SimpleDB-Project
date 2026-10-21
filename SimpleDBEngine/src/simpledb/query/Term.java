@@ -207,6 +207,10 @@ public class Term {
    public boolean appliesTo(Schema sch) {
       return lhs.appliesTo(sch) && rhs.appliesTo(sch);
    }
+
+   public Expression lhs() { return lhs; }
+   public Expression rhs() { return rhs; }
+   public String operator() { return operator; }
    
    /** Bind quoted TIME literals before physical operators choose their keys. */
    public void validateTimeTypes(Schema schema) {

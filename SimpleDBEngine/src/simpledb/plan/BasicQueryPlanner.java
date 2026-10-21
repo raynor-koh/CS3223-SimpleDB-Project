@@ -23,6 +23,7 @@ public class BasicQueryPlanner implements QueryPlanner {
     * projects on the field list, and applies any requested ordering.
     */
    public Plan createPlan(QueryData data, Transaction tx) {
+      new QueryValidator(mdm).validate(data, tx);
       //Step 1: Create a plan for each mentioned table or view.
      List<Plan> plans = new ArrayList<>();
       for (String tblname : data.tables()) {

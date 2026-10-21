@@ -68,6 +68,12 @@ public class Expression {
    }
    
    public String toString() {
-      return (val != null) ? val.toString() : fldname;
+      if (val == null) return fldname;
+      if (val.type() == java.sql.Types.INTEGER) return val.toString();
+      // QueryData uses this text to store view definitions. Preserve quoted
+      // values and the backslash escapes understood by the SQL lexer.
+      String text = val.toString().replace("\\", "\\\\").replace("'", "\\'")
+            .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+      return "'" + text + "'";
    }
 }

@@ -54,6 +54,10 @@ public class Predicate {
          term.validateTimeTypes(schema);
    }
 
+   public List<Term> terms() {
+      return Collections.unmodifiableList(terms);
+   }
+
    /** 
     * Calculate the extent to which selecting on the predicate 
     * reduces the number of records output by a query.

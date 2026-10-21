@@ -116,20 +116,13 @@ public class JoinIntegrationTest {
       check(tablePolicy.get(new TablePlanner("leftint", new Predicate(), tx, db.mdMgr()))
             == JoinPolicy.defaultPolicy(), "Legacy table constructor must use default policy");
 
-      // Capture table planners created through the real query-planning path.
-      List<TablePlanner> created = new ArrayList<TablePlanner>();
-      Field tables = HeuristicQueryPlanner.class.getDeclaredField("tableplanners");
-      tables.setAccessible(true);
-      tables.set(first, new ArrayList<TablePlanner>() {
-         @Override
-         public boolean add(TablePlanner table) {
-            created.add(table);
-            return super.add(table);
-         }
-      });
-      first.createPlan(new Parser("select lid from leftint").query(), tx);
-      check(created.size() == 1 && tablePolicy.get(created.get(0)) == hash,
-            "Query planner must pass its policy to each table planner");
+      // Verify policy propagation through actual plans, independent of how
+      // the planner stores its per-query inputs during recursive view planning.
+      String join = "select lid, rid from leftint, rightint where ikey = jkey";
+      assertCorePlan(first.createPlan(new Parser(join).query(), tx).children().get(0),
+            HashJoinPlan.class, "Hash-only planner must propagate its join policy");
+      assertCorePlan(second.createPlan(new Parser(join).query(), tx).children().get(0),
+            MergeJoinPlan.class, "Merge-only planner must propagate its join policy");
       check(queryPolicy.get(second) == merge,
             "Planning with one instance must not change another instance's policy");
    }

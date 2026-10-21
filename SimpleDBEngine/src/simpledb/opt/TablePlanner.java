@@ -1,6 +1,7 @@
 package simpledb.opt;
 
 import java.util.Map;
+import java.util.Collections;
 import java.util.Objects;
 import simpledb.tx.Transaction;
 import simpledb.record.*;
@@ -20,7 +21,7 @@ import simpledb.plan.*;
 class TablePlanner {
     /** Enable with -Dsimpledb.traceJoins=true when manually testing plans. */
     private static final boolean TRACE_JOINS = Boolean.getBoolean("simpledb.traceJoins");
-    private TablePlan myplan;
+    private Plan myplan;
     private Predicate mypred;
     private Schema myschema;
     private Map<String, IndexInfo> indexes;
@@ -46,13 +47,20 @@ class TablePlanner {
     /** Configures eligible join algorithms without changing their preference order. */
     public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm,
                         JoinPolicy joinPolicy) {
-        this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
-        this.tableName = tblname;
-        this.mypred = mypred;
-        this.tx = tx;
-        myplan = new TablePlan(tx, tblname, mdm);
-        myschema = myplan.schema();
+        this(tblname, new TablePlan(tx, tblname, mdm), mypred, tx, joinPolicy);
         indexes = mdm.getIndexInfo(tblname, tx);
+    }
+
+    /** A view is a planned relation with no physical indexes of its own. */
+    TablePlanner(String name, Plan input, Predicate predicate, Transaction tx,
+                 JoinPolicy joinPolicy) {
+        this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
+        this.tableName = name;
+        this.mypred = predicate;
+        this.tx = tx;
+        myplan = input;
+        myschema = myplan.schema();
+        indexes = Collections.emptyMap();
     }
 
     /**
@@ -140,6 +148,8 @@ class TablePlanner {
     }
 
     private Plan makeIndexSelect() {
+        if (!(myplan instanceof TablePlan))
+            return null;
         for (String fldname : indexes.keySet()) {
             Constant val = mypred.equatesWithConstant(fldname);
             if (val != null) {
@@ -147,19 +157,21 @@ class TablePlanner {
                     val = Constant.time(val.asString());
                 IndexInfo ii = indexes.get(fldname);
                 trace("index on " + fldname + " used");
-                return new IndexSelectPlan(myplan, ii, val);
+                return new IndexSelectPlan((TablePlan) myplan, ii, val);
             }
         }
         return null;
     }
 
     private Plan makeIndexJoin(Plan current, Schema currsch) {
+        if (!(myplan instanceof TablePlan))
+            return null;
         for (String fldname : indexes.keySet()) {
             String outerfield = mypred.equatesWithField(fldname);
             if (outerfield != null && currsch.hasField(outerfield)) {
                 IndexInfo ii = indexes.get(fldname);
                 trace("index join: " + outerfield + " = " + fldname);
-                Plan p = new IndexJoinPlan(current, myplan, ii, outerfield);
+                Plan p = new IndexJoinPlan(current, (TablePlan) myplan, ii, outerfield);
                 p = addSelectPred(p);
                 return addJoinPred(p, currsch);
             }
