@@ -1,6 +1,120 @@
 # Testing Guide
 
-This document records the test cases added for each lab feature.
+This document records the automated suites, manual examples, and expected
+results for the integrated engine.
+
+## Run the Full Automated Baseline
+
+From the `SimpleDBEngine` directory, use PowerShell on Windows:
+
+```powershell
+powershell -NoProfile -File .\scripts\run-baseline.ps1
+```
+
+Or use Bash 4 or newer, including Linux/WSL:
+
+```bash
+bash scripts/run-baseline.sh
+```
+
+Both runners compile all Java source files into a fresh temporary directory,
+then execute the same 26 suites with Java assertions enabled (`-ea`). They
+isolate working directories and generated databases from the shared `studentdb`,
+retain compiler output and per-suite logs, and print their artifact directory.
+A compilation error or failed suite produces a nonzero exit status.
+
+The latest recorded full run on **22 October 2026**, using OpenJDK/javac
+**25.0.4.1**, compiled **207 Java files** and passed **26 suites / 10,269
+reported checks**. The runner's final summary is:
+
+```text
+Baseline: 26 passed, 0 failed, 26 total.
+```
+
+This result was obtained with the Bash runner. The PowerShell runner has the
+same suite list but was not executed in the audit environment. Check counts
+are custom assertions, not line/branch coverage percentages or independent SQL
+scenario counts. Benchmark/report timings must be collected separately.
+
+To run individual suites with the commands below, first compile into `bin`
+as described in [README.md](README.md#manual-compilation). The baseline runner
+uses its own temporary classes directory and does not refresh `bin`.
+
+Interactive lexer/parser examples, `ScanTest3`, and the live network/client
+checks described below are additional checks outside the 26-suite baseline.
+
+## Index Backfill and Merge-Join Rewind Regressions
+
+Both baseline runners include these two additional executable suites:
+
+- `simpledb.index.IndexBackfillIntegrationTest`: creates hash and B-tree
+  indexes after loading integer, varchar, and TIME keys, with duplicate keys
+  and deleted slots. It compares complete SQL result bags and raw index RID
+  probes against an independent row model, checks index-plan selection, and
+  verifies later inserts/updates/deletes and database reopen. Direct metadata
+  API creation and buffer restoration are covered too.
+- `simpledb.materialize.MergeJoinRewindIntegrationTest`: repeatedly rewinds
+  the same scan after partial and complete consumption, including duplicate
+  keys, multiple natural sort runs, empty/no-match inputs, and a merge join
+  repeatedly rewound as the RHS of nested loops. A direct sort-bookmark case
+  verifies restoration of the selected run and end-of-run flags after
+  exhaustion. Exact result bags retain duplicate multiplicities, and scans
+  must release their buffers before commit.
+
+Both suites failed against the original implementations. Index creation now
+backfills live rows before publishing catalog metadata; merge rewind clears
+the current join key, and sort bookmarks restore the complete merge state.
+Each suite uses fresh temporary databases. Together they add 3,362 checks
+to the previous 24-suite / 6,907-check baseline.
+
+### Populated-Table Index Creation
+
+After compiling the current source into `bin`, run:
+
+```text
+java -ea -cp bin simpledb.index.IndexBackfillIntegrationTest
+```
+
+Expected final output:
+
+```text
+All 3170 index-backfill integration checks passed.
+```
+
+The SQL fixture loads rows before creating the index, probes the same keys
+before and after creation, then verifies persistence and later mutations. It
+covers both hash and B-tree indexes with INTEGER, VARCHAR, and TIME keys.
+Deleted slots must be skipped, duplicate-key rows must all be indexed, and
+absent-key probes must remain empty. Result bags count each returned row so
+extra index entries cannot be hidden by set comparison. A separate fixture
+also creates populated indexes through `MetadataMgr.createIndex(...)`.
+
+Before the fix, equality probes after index creation returned empty results.
+The change applies to newly created indexes; it does not automatically repair
+an incomplete index already present in an older database.
+
+### Merge-Join Rewind and Sort Bookmarks
+
+```text
+java -ea -cp bin simpledb.materialize.MergeJoinRewindIntegrationTest
+```
+
+Expected final output:
+
+```text
+All 192 merge-rewind integration checks passed.
+```
+
+The suite checks repeated `beforeFirst()` calls on the **same scan**, rather
+than only opening a new scan from the same plan. Fixtures cover all-equal keys,
+multiple keys, duplicate matches across final sort runs, partial/full
+consumption, and empty/no-match inputs. A nested-loop parent repeatedly rewinds
+its merge-join RHS; the expected bag doubles every matching pair. A direct
+sort-bookmark test exhausts both runs and restores the same bookmark repeatedly.
+
+Before the fix, the all-equal fixture threw a NullPointerException after
+rewind. Resetting only the merge key still failed a two-run duplicate fixture;
+restoring the selected sort run and availability flags is also required.
 
 ## Lab 1: Support Non-Equality Predicates
 
@@ -146,6 +260,71 @@ All 13 ScanTest3 checks passed.
 The generated `scantest3/` database directory is a test artifact and should
 not be committed.
 
+## Query Validation, DISTINCT, and EXPLAIN Tests
+
+Both baseline runners include the following suites. Run an individual class
+with `java -ea -cp bin <class>` after manual compilation.
+
+| Class | Reported checks | Coverage |
+| --- | ---: | --- |
+| `simpledb.parse.QueryValidationParserTest` | 101 | Complete statements, malformed clauses, trailing tokens, exact integer limits, decimal rejection, quoted strings, and useful syntax diagnostics. |
+| `simpledb.plan.QueryValidationIntegrationTest` | 964 | Missing/ambiguous tables and fields, incompatible types, invalid aggregates/grouping/ordering, recursive views and cycles, and valid queries across Basic/Better/Heuristic planners. |
+| `simpledb.parse.DistinctParserTest` | 10 | DISTINCT parsing, case normalization, query rendering, and malformed syntax. |
+| `simpledb.materialize.DistinctPlanTest` | 12 | Physical duplicate elimination. |
+| `simpledb.materialize.DistinctQueryIntegrationTest` | 12 | DISTINCT through the query-planning/execution path. |
+| `simpledb.parse.ExplainParserTest` | 8 | Wrapping SELECT with EXPLAIN and rejecting invalid commands. |
+| `simpledb.plan.PlanExplainerTest` | 6 | Deterministic physical-plan formatting without opening execution scans. |
+| `simpledb.plan.ExplainIntegrationTest` | 5 | Public EXPLAIN integration. |
+
+Validation integration checks both SELECT planning and EXPLAIN rejection,
+including unchanged file names and available buffers for invalid queries.
+This is SELECT/EXPLAIN semantic validation; it is not comprehensive DDL/DML
+error coverage. Valid views preserve their grouping, DISTINCT, ordering, and
+eligible join policies.
+
+DISTINCT after joined aggregation and projection is also covered by
+`JoinFeatureIntegrationTest`. `QueryResourceIntegrationTest` guards real
+EXPLAIN trees against execution, materialization, and buffer leaks. EXPLAIN
+can still read metadata/statistics during planning; its estimates are not
+measured execution timings. The direct SimpleIJ/API path supports EXPLAIN;
+there is no JDBC EXPLAIN ResultSet command.
+
+## SQL TIME Integration Tests
+
+Run `scripts/run-baseline.sh` to compile the engine and include
+`simpledb.test.TimeTypeIntegrationTest` in the regression suite. The test uses
+an isolated temporary database and covers:
+
+- `TIME` schema/catalog persistence and fixed-width record layout across reopen;
+- midnight, fractional values, the last microsecond of the day, and rejection
+  of malformed values, invalid components, excess precision, and `24:00:00`;
+- insert, update, read, predicate comparisons, ordering, DISTINCT, and legacy
+  integer/varchar behavior;
+- duplicate-key lookup in both hash and B-tree indexes; and
+- JDBC `Types.TIME` metadata, canonical string output, legacy `getTime()`, and
+  exact `getObject(..., LocalTime.class)` retrieval.
+
+Expected final output:
+
+```text
+All 31 TIME integration checks passed.
+```
+
+Its generated database is under the operating system's temporary directory.
+
+`simpledb.test.TimeTypeRegressionTest` adds 70 checks for the TIME review fixes:
+
+- reject mixed TIME/VARCHAR column comparisons before choosing any of the four
+  join methods, while preserving valid TIME joins and quoted literal comparisons;
+- reject invalid raw TIME writes before changing record bytes;
+- preserve milliseconds in JDBC `getTime()` and all microseconds in `LocalTime`;
+- reuse table schemas during inserts and bulk updates in both update planners;
+- return `SQLException` for invalid labels, indexes, requested types, malformed
+  network values, and transport failures.
+
+Network conversion checks use a stub remote result set, without an RMI server.
+Both Bash and PowerShell baseline runners include both TIME test classes.
+
 ## Typed Index Structures
 
 ### CREATE INDEX Parser Tests
@@ -264,7 +443,7 @@ the misspelling `agv`.
 Expected output:
 
 ```text
-All 22 aggregate parser checks passed.
+All 30 aggregate parser checks passed.
 ```
 
 ### Aggregate Integration Tests
@@ -321,7 +500,7 @@ java -cp bin simpledb.opt.JoinIntegrationTest
 ```
 
 This test creates a uniquely named database under the operating system's
-temporary directory. It does not create or modify `studentdb`. The 55 checks
+temporary directory. It does not create or modify `studentdb`. The 74 checks
 cover:
 
 - nested-loops joins for equality, `<`, `<=`, `>`, `>=`, `!=`, and `<>`;
@@ -342,11 +521,187 @@ cover:
 The expected final output is:
 
 ```text
-All 55 join integration checks passed.
+All 74 join integration checks passed.
 ```
 
 The test also verifies that `NestedLoopJoinPlan` opens a
 `NestedLoopJoinScan`, and that `MergeJoinPlan` opens a `MergeJoinScan`.
+
+### Join Policy Integration Tests
+
+Both baseline runners include `simpledb.opt.JoinPolicyIntegrationTest`.
+It uses fresh temporary databases and performs 236 checks covering:
+
+- strict index, hash, merge, and nested-loop plans through the public planner;
+- explicit expected result bags, including duplicate projected tuples;
+- integer/string keys, reversed equality operands, local selections, and
+  residual equality/non-equality predicates;
+- clear planning failures for unavailable methods without a product bypass;
+- three-table continuation under strict index/hash/merge policies: skip an
+  initially unusable relation, join a later candidate, then revisit the first;
+- failures after a partial join, with blocked relations, predicates, allowed
+  methods, and current fields in the diagnostic; successful planner reuse after
+  failure;
+- disconnected products alone and alongside a compliant three-table chain,
+  without allowing unrelated tables to bypass a blocked connected join;
+- disconnected products, hash buffer eligibility, and allowed merge fallback;
+- index selection remaining available when index joins are disabled; and
+- index-selection output appearing only with opt-in tracing.
+
+The physical tree is inspected as well as the result bag. EXPLAIN estimates
+for nested-loop equality joins also exercise the regression that previously
+caused recursive distinct-value estimation to overflow the stack.
+
+Expected final output:
+
+```text
+All 236 join-policy integration checks passed.
+```
+
+To check tracing explicitly after compilation, run in a fresh JVM:
+
+```text
+java -ea -Dsimpledb.traceJoins=true -cp bin simpledb.opt.JoinPolicyIntegrationTest
+```
+
+### Lab 7 Combined Join Integration Tests
+
+Both baseline runners include `simpledb.test.JoinFeatureIntegrationTest`, which
+performs 947 checks using the fixed `JoinFeatureFixture` and typed tuple-bag helpers
+in `QueryResultAssertions`. Each run creates an isolated temporary database.
+The four tables have 3, 5, 6, and 7 records; indexes are created before inserts
+and the database is reopened to refresh statistics consistently.
+
+Expected answers are computed by plain Java loops over source fixture rows,
+without engine scans, join operators, or SQL predicate evaluation. The checks
+cover duplicate keys (2 x 3 matches), unmatched keys on both sides, additional
+equality conditions, non-equality residuals, local filters, and empty results.
+Four-table chains preserve all three join conditions and return 14 rows before
+extra filtering. Projections include integer and string fields and deliberately
+duplicate output tuples; comparison retains each tuple's occurrence count.
+
+Each equality workload runs under strict index/hash/merge/nested-loop policies
+and the default policy. The actual physical tree must contain the expected
+one or three join nodes and no products. A pure non-equality join also runs
+under nested loops. The indexed-selection-to-hash case guards against output
+partitions exhausting buffers already occupied by the input scan.
+
+Final-stage combinations add 13 cases per profile for all four strict policies
+and the default policy. Explicit expected tuples cover joined global/grouped
+COUNT, SUM, AVG, MIN, and MAX, including four-table aggregation. Equal results
+from different groups remain duplicate rows until DISTINCT follows projection;
+dropping all or part of the grouping key must collapse only identical complete
+projected tuples. Paired queries with and without DISTINCT verify both counts.
+
+Queries with ORDER BY compare exact typed sequences in addition to result bags.
+Cases exercise ASC/DESC and DESC/ASC combinations, aggregate-output sort fields,
+and three-field ordering, with ties on primary keys. Physical trees must retain
+aggregation before projection, DISTINCT after projection, and outer ordering
+after DISTINCT. The sequence helper closes every scan just like bag comparison.
+
+Expected final output:
+
+```text
+All 947 join-feature integration checks passed.
+```
+
+### Query Resource Integration Tests
+
+Both baseline runners include `simpledb.test.QueryResourceIntegrationTest`.
+Run it separately after compilation with:
+
+```text
+java -ea -cp bin simpledb.test.QueryResourceIntegrationTest
+```
+
+The suite has a 120-second deadline covering setup and checks. Work runs in a
+daemon thread, so a stuck engine call cannot keep the test JVM alive after
+timeout; the failure includes the worker stack. Databases are isolated under
+the system temporary directory and their path is printed.
+
+- All four strict join profiles exercise early close before reading, early
+  close after one row, complete consumption, and repeated opening of the same
+  plan. Cases include a four-table chain, joined aggregation, DISTINCT/order,
+  empty inputs on either side, both inputs empty, and no matches.
+- Each scan's close must restore buffer availability in the same transaction,
+  before commit could hide leaked pins. Complete tuple bags remain correct on
+  every repeated execution.
+- Two 24-row wide-layout inputs each physically exceed the eight-buffer pool.
+  Descending input requires multiple sorting runs/merge passes; exact ascending
+  output is checked. Single-key skew returns all 24 x 24 = 576 expected pairs.
+  Runtime fallback is inspected directly, including its early-close cleanup.
+- Public `Planner.explain` traverses guarded real combined-query trees; opening
+  the root or any displayed child fails the test. Repeated display must leave
+  buffer availability and temporary-table files unchanged. Executing the same
+  unguarded physical plan confirms that the file check detects materialization.
+
+These cases also guard the fixes for an unclosed B-tree initialization leaf
+page and for a final skewed hash partition being skipped before its fallback
+scan could be consumed. They do not claim EXPLAIN avoids metadata/statistics
+reads or that all possible resource/error paths are covered.
+
+Expected final output:
+
+```text
+All 347 query-resource integration checks passed.
+```
+
+### Indexed Updates and Joined Aggregates
+
+Both baseline runners include `simpledb.test.IndexedUpdateAggregateIntegrationTest`.
+It performs 3,590 checks across isolated hash-backed and B-tree-backed fixtures.
+Indexes on the fact join key, fact amount, and dimension join key are created
+before insertion, and all mutations use `IndexUpdatePlanner` through `Planner`.
+
+Twelve states per index type cover initial data, inserts, moving an indexed join
+key, changing an indexed aggregate input, a bulk key update, deleting matching
+rows from multiple indexes, reinsertion into deleted slots, dimension-key
+updates, deleting unmatched rows, emptying facts, negative reinsertion, and
+deleting matching dimensions. Each state is checked before commit, then again
+with a new SimpleDB instance and freshly reconstructed metadata.
+
+Checks compare full table scans with an independent source-row model, raw index
+RID probes with complete expected tuples, and SQL equality probes with verified
+`IndexSelect` nodes. Probe values include old, new, deleted, and absent keys.
+Joined global/grouped COUNT, SUM, AVG, MIN, and MAX are computed independently
+from model pairs and compared under default and strict index-join policies;
+actual `IndexJoin` nodes are required. Duplicate dimension keys multiply fact
+rows and aggregate contributions. Scans/indexes close explicitly, and available
+buffers must be restored before commit.
+
+The test preserves the documented integer AVG and zero-row global aggregation
+on empty input. Expected final output:
+
+```text
+All 3590 indexed-update aggregate integration checks passed.
+```
+
+### Grouping Validation and Aggregate Boundaries
+
+Both baseline runners include `simpledb.test.AggregateSemanticsIntegrationTest`,
+which performs 173 checks through heuristic and basic planners. The parser suite
+also rejects ungrouped selected fields when GROUP BY has no aggregate functions.
+Valid grouping-only queries, projections of a subset of grouping fields, and
+ordinary SELECT queries continue to work.
+
+Invalid selections fail in `createQueryPlan` and EXPLAIN with a grouping
+diagnostic, without creating execution temporary tables or leaking buffers.
+A sentinel input plan whose `open()` and execution-estimate methods throw
+confirms that shared aggregate validation rejects invalid selections using only
+the input schema, before execution.
+
+AVG tests cover negative and positive fractions, truncation toward zero near
+zero, and same-sign pairs at the 32-bit limits that require a wider accumulator.
+The result type remains integer. Empty physical tables and filters matching no
+rows return zero rows for COUNT(*), COUNT(field), SUM, AVG, MIN, MAX, mixed
+integer/string aggregate lists, and grouped queries. This explicitly preserves
+the current nonstandard empty-global-aggregate policy documented in README.
+
+Expected final output:
+
+```text
+All 173 aggregate-semantics integration checks passed.
+```
 
 ### Join Strategy Tracing
 
@@ -366,9 +721,9 @@ The trace identifies the physical strategy selected by `TablePlanner`:
 [planner] cross product
 ```
 
-For two-table queries, the printed strategy is the selected strategy. During a
-multi-table heuristic-planning pass, the planner may print strategies while it
-evaluates candidate tables.
+Trace messages can describe candidate plans considered during optimization.
+Use EXPLAIN to inspect the selected physical tree, including the join order,
+access paths, and residual predicates.
 
 ### Recreate the Student Database
 
