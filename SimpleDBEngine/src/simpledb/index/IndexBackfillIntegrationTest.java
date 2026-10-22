@@ -1,10 +1,12 @@
 package simpledb.index;
 
 import java.nio.file.Files;
+import java.util.BitSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import simpledb.metadata.IndexInfo;
+import simpledb.file.BlockId;
 import simpledb.plan.Plan;
 import simpledb.plan.PlanExplainer;
 import simpledb.plan.Planner;
@@ -19,12 +21,100 @@ public class IndexBackfillIntegrationTest {
    private static int checks;
 
    public static void main(String[] args) throws Exception {
+      testBtreeSplitResources();
       for (String method : new String[] { "hash", "btree" }) {
          for (String type : new String[] { "int", "varchar(12)", "time" })
             exercise(method, type);
          testMetadataCreation(method);
       }
       System.out.println("All " + checks + " index-backfill integration checks passed.");
+   }
+
+   private static void testBtreeSplitResources() throws Exception {
+      String path = Files.createTempDirectory("simpledb-btree-splits-").resolve("db").toString();
+      SimpleDB db = new SimpleDB(path);
+      Transaction tx = db.newTx();
+      try {
+         for (boolean duplicates : new boolean[] {false, true}) {
+            String tableName = duplicates ? "splitdups" : "splitunique";
+            String indexName = duplicates ? "split_d" : "split_u";
+            int rows = duplicates ? 256 : 512;
+            db.planner().executeUpdate("create table " + tableName + "(id int, keyval int)", tx);
+            db.planner().executeUpdate("create index " + indexName + " on " + tableName
+                  + "(keyval) using btree", tx);
+            Index index = db.mdMgr().getIndexInfo(tableName, tx).get("keyval").open();
+            TableScan table = new TableScan(tx, tableName, db.mdMgr().getLayout(tableName, tx));
+            try {
+               for (int id = 0; id < rows; id++) {
+                  table.insert();
+                  table.setInt("id", id);
+                  table.setInt("keyval", duplicates ? 7 : id);
+                  int before = tx.availableBuffs();
+                  index.insert(new Constant(duplicates ? 7 : id), table.getRid());
+                  check(tx.availableBuffs() == before,
+                        "B-tree split leaked a buffer at inserted row " + id + ", duplicates=" + duplicates);
+               }
+            } finally {
+               index.close();
+               table.close();
+            }
+            check(tx.availableBuffs() == SimpleDB.BUFFER_SIZE, "B-tree insert resources were not restored");
+            if (duplicates)
+               check(tx.size(indexName + "leaf") > SimpleDB.BUFFER_SIZE,
+                     "Duplicate fixture must exercise more overflow pages than available buffers");
+            else {
+               BlockId root = new BlockId(indexName + "dir", 0);
+               tx.pin(root);
+               try { check(tx.getInt(root, 0) > 0, "Unique fixture must split directories and grow the root"); }
+               finally { tx.unpin(root); }
+            }
+         }
+         verifySplitIndexes(db, tx);
+         tx.commit();
+      } catch (RuntimeException | Error e) {
+         tx.rollback();
+         throw e;
+      }
+      db = new SimpleDB(path);
+      tx = db.newTx();
+      try {
+         verifySplitIndexes(db, tx);
+         tx.commit();
+      } catch (RuntimeException | Error e) {
+         tx.rollback();
+         throw e;
+      }
+   }
+
+   private static void verifySplitIndexes(SimpleDB db, Transaction tx) {
+      for (boolean duplicates : new boolean[] {false, true}) {
+         String name = duplicates ? "splitdups" : "splitunique";
+         int rows = duplicates ? 256 : 512;
+         int before = tx.availableBuffs();
+         Index index = db.mdMgr().getIndexInfo(name, tx).get("keyval").open();
+         TableScan table = new TableScan(tx, name, db.mdMgr().getLayout(name, tx));
+         BitSet seen = new BitSet();
+         try {
+            for (int key = 0; key < (duplicates ? 1 : rows); key++) {
+               index.beforeFirst(new Constant(duplicates ? 7 : key));
+               while (index.next()) {
+                  table.moveToRid(index.getDataRid());
+                  int id = table.getInt("id");
+                  check(id >= 0 && id < rows && !seen.get(id)
+                        && table.getInt("keyval") == (duplicates ? 7 : key)
+                        && (duplicates || id == key), "Incorrect or duplicate RID after B-tree splits");
+                  seen.set(id);
+               }
+            }
+            check(seen.cardinality() == rows, "B-tree splits lost indexed rows");
+            index.beforeFirst(new Constant(-1));
+            check(!index.next(), "Split index returned an absent key");
+         } finally {
+            index.close();
+            table.close();
+         }
+         check(tx.availableBuffs() == before, "Split index probes leaked buffers");
+      }
    }
 
    private static void testMetadataCreation(String method) throws Exception {

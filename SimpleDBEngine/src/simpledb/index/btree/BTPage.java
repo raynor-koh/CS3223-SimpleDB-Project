@@ -73,9 +73,12 @@ public class BTPage {
    public BlockId split(int splitpos, int flag) {
       BlockId newblk = appendNew(flag);
       BTPage newpage = new BTPage(tx, newblk, layout);
-      transferRecs(splitpos, newpage);
-      newpage.setFlag(flag);
-      newpage.close();
+      try {
+         transferRecs(splitpos, newpage);
+         newpage.setFlag(flag);
+      } finally {
+         newpage.close();
+      }
       return newblk;
    }
    
@@ -113,8 +116,13 @@ public class BTPage {
    public BlockId appendNew(int flag) {
       BlockId blk = tx.append(currentblk.fileName());
       tx.pin(blk);
-      format(blk, flag);
-      return blk;
+      try {
+         format(blk, flag);
+         return blk;
+      } finally {
+         // The caller opens its own BTPage; release this formatting pin first.
+         tx.unpin(blk);
+      }
    }
  
    public void format(BlockId blk, int flag) {
