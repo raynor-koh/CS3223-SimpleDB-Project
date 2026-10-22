@@ -1,6 +1,7 @@
 package simpledb.materialize;
 
 import simpledb.query.*;
+import simpledb.record.Schema;
 
 /**
  * The <i>count</i> aggregation function.
@@ -8,11 +9,11 @@ import simpledb.query.*;
  */
 public class CountFn implements AggregationFn {
    private String fldname;
-   private int count;
+   private long count;
    
    /**
     * Create a count aggregation function for the specified field.
-    * @param fldname the name of the aggregated field
+    * @param fldname the name of the aggregated field, or null for COUNT(*)
     */
    public CountFn(String fldname) {
       this.fldname = fldname;
@@ -39,13 +40,26 @@ public class CountFn implements AggregationFn {
    public void processNext(Scan s) {
       count++;
    }
+
+   public boolean supportsEmptyGroup() {
+      return true;
+   }
+
+   public void processEmptyGroup() {
+      count = 0;
+   }
    
    /**
     * Return the field's name, prepended by "countof".
     * @see simpledb.materialize.AggregationFn#fieldName()
     */
    public String fieldName() {
-      return "countof" + fldname;
+      return "countof" + (fldname == null ? "all" : fldname);
+   }
+
+   /** COUNT always returns an integer in the current SimpleDB type system. */
+   public void addFieldTo(Schema outputSchema, Schema inputSchema) {
+      outputSchema.addIntField(fieldName());
    }
    
    /**
@@ -53,6 +67,6 @@ public class CountFn implements AggregationFn {
     * @see simpledb.materialize.AggregationFn#value()
     */
    public Constant value() {
-      return new Constant(count);
+      return new Constant(Math.toIntExact(count));
    }
 }

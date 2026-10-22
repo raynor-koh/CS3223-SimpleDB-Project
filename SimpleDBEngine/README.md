@@ -122,7 +122,40 @@ for example:
 "args": ["mydatabase"]
 ```
 
-## Run the direct SimpleDB tests
+## Run the automated regression suite
+
+The baseline runners compile the source into a fresh temporary directory and
+run all 28 automated suites without using the shared `studentdb`. From the
+project directory, use either:
+
+```powershell
+powershell -NoProfile -File .\scripts\run-baseline.ps1
+```
+
+```bash
+bash scripts/run-baseline.sh
+```
+
+The Bash runner requires Bash 4 or newer. Both runners print the artifact
+directory containing compiled classes, compiler output, per-suite logs, and
+isolated databases. They return a nonzero exit status if compilation or a
+suite fails; the temporary artifacts remain available for inspection.
+
+The latest recorded Bash run on 22 October 2026 compiled 208 Java files and
+passed **28 suites / 13,690 checks**, including populated-table index creation,
+merge-join rewind, B+-tree split resources, empty COUNT, and decimal AVG regressions. The PowerShell suite list matches;
+that runner was not executed in the audit environment.
+
+For synthetic join workloads and reproducible timing collection, see
+[experiments/README.md](experiments/README.md). The harness generates independent
+fixtures, verifies complete result bags, and saves physical plans and raw timings.
+
+See [TEST.md](TEST.md) for individual commands, coverage, and expected results.
+These regression results do not provide the experimental timings required for
+the report; remaining demo/report work is tracked in
+[PROJECT_READINESS_AUDIT.md](PROJECT_READINESS_AUDIT.md).
+
+## Run the direct SimpleDB examples
 
 The programs under `src/simpledb/test` access the engine classes directly and
 do not require the server. Run them from the `SimpleDBEngine` project using the
@@ -168,3 +201,178 @@ SimpleDBEngine/studentdb/
 The direct `SimpleIJ` and the network server use separate database instances
 when they run from different project directories, even if both databases are
 named `studentdb`.
+
+Enter one SQL statement per line and omit trailing semicolons. To keep the
+demo separate from your existing database, launch the setup program and direct
+client from the same fresh working directory, using an absolute classpath to
+the compiled engine.
+
+## Hash and B+-tree indexes
+
+`CREATE INDEX` accepts `USING hash` or `USING btree`; omitting the clause
+defaults to hash. Index creation now indexes existing live rows, including
+duplicate keys, before publishing the index in the catalog. This works through
+both SQL and `MetadataMgr.createIndex(...)`.
+
+For example, run these commands once in a fresh test database:
+
+```sql
+create table indexdemo(id int, keyval int)
+insert into indexdemo(id, keyval) values (1, 7)
+insert into indexdemo(id, keyval) values (2, 7)
+create index idx_demo on indexdemo(keyval) using btree
+explain select id from indexdemo where keyval = 7
+select id from indexdemo where keyval = 7 order by id
+```
+
+The SELECT returns IDs `1` and `2`; EXPLAIN shows an `IndexSelect` node.
+Use `USING hash` instead to try the other structure in a fresh fixture.
+Both types support INTEGER, VARCHAR, and TIME keys. Inserts, indexed-field
+updates, and deletes maintain the indexes through `IndexUpdatePlanner`.
+The planner uses these indexes for equality probes; non-equality conditions
+use other access paths, including for B+-tree indexes.
+
+This change does not automatically repair incomplete indexes created by an
+older build. Regenerate affected demo/test databases from their fixtures.
+
+## SQL TIME values
+
+Declare time-of-day fields with `TIME` and supply quoted `HH:MM:SS` values,
+optionally with one to six fractional digits:
+
+```sql
+create table demotime(tid int, starttime time)
+insert into demotime(tid, starttime) values (1, '09:30:00.123456')
+select tid, starttime from demotime where starttime > '09:00:00' order by starttime
+```
+
+TIME has microsecond precision and no date or time zone. Its valid range is
+midnight through `23:59:59.999999`; invalid values such as `24:00:00` are
+rejected. Storage, comparisons, joins, ordering, DISTINCT, and both index
+types preserve the typed value.
+
+JDBC metadata reports `Types.TIME`. Use `getString()` for canonical text or
+`getObject(..., LocalTime.class)` for exact microseconds. Legacy `getTime()`
+retains milliseconds, while `java.sql.Time.toString()` displays whole seconds.
+
+## Query validation
+
+SELECT and EXPLAIN validate table/view existence, missing or ambiguous fields,
+comparison types, aggregate arguments, GROUP BY membership, and ORDER BY
+availability before query execution. Views are validated recursively, including
+cycle detection. Basic, Better, and Heuristic planners share this validation.
+
+For example, `select missing from student` reports
+`SELECT field not found: missing`. Names are unqualified: qualified names such
+as `student.sid` and table aliases are not supported. ORDER BY fields must
+appear in the SELECT output. Semantic validation of updates and schema changes
+is not comprehensive.
+
+## Lab 6 SQL extensions
+
+### `DISTINCT`
+
+Use `DISTINCT` immediately after `SELECT` to remove duplicate output rows.
+Duplicates are compared across every field in the select list.
+
+```sql
+select distinct majorid from student
+select distinct majorid, gradyear from student order by majorid, gradyear
+```
+
+`DISTINCT` is evaluated after projection and after any aggregation or grouping.
+It does not promise an output order by itself; add `ORDER BY` whenever the
+display order matters.
+
+### `EXPLAIN`
+
+Prefix a supported `SELECT` query with `EXPLAIN` in the direct `SimpleIJ`
+client to display its physical query plan:
+
+```sql
+explain select distinct majorid from student order by majorid desc
+```
+
+The output is a tree of physical operators with estimated block accesses and
+record counts. It is read-only: `EXPLAIN` builds and formats the plan but does
+not open a scan or execute the query. It supports the same query features as
+the engine's `SELECT` parser, including `DISTINCT`, `WHERE`, `GROUP BY`,
+aggregates, joins, and `ORDER BY`.
+
+`EXPLAIN` is currently available through `Planner.explain(...)` and the direct
+`SimpleIJ` client. It is not exposed as a JDBC `ResultSet` command.
+
+## Grouping and aggregate semantics
+
+Whenever a query contains GROUP BY or aggregate functions, every selected
+non-aggregate field must appear in GROUP BY. Validation happens during planning,
+including EXPLAIN, before query execution. For example:
+
+```sql
+select majorid from student group by majorid
+```
+
+is valid, while `select sname from student group by majorid` is rejected with
+`SELECT field sname must appear in GROUP BY`. Selecting a subset of multiple
+grouping fields is allowed. Ordinary SELECT without grouping or aggregates
+retains its existing behavior.
+
+AVG accepts integer inputs and returns a numeric **DECIMAL(16,6)** result,
+rounded to six fractional digits using `HALF_UP`. The average of -5 and 2 is
+`-1.500000`; the average of 5 and -2 is `1.500000`; one third is `0.333333`.
+Accumulation uses `BigDecimal` so intermediate sums do not overflow integers.
+Decimals retain numeric ordering and equality through ORDER BY, DISTINCT,
+views, and temporary materialization. This is an internal computed-result type:
+SQL DECIMAL/DOUBLE column declarations and decimal literals are not added.
+SUM and AVG still require INTEGER input columns. Comparisons require matching
+types, as before; decimal/integer coercion is not implemented.
+
+The direct SimpleIJ prints decimal results. Embedded and network JDBC report
+`Types.DECIMAL`, precision 16 and scale 6; use `getBigDecimal()` or
+`getObject(..., BigDecimal.class)` for exact retrieval. `getDouble()` explicitly
+converts to floating point, and `getInt()` explicitly truncates toward zero.
+
+Empty global **COUNT-only** queries return one row containing zero for each
+COUNT(*) or COUNT(field). Empty global queries containing SUM, AVG, MIN, MAX,
+or a mix of COUNT and those functions retain the no-row policy because SQL
+NULL is not supported. Empty grouped queries produce no groups. This applies
+both to empty tables and filters that match no rows.
+
+## Join-method configuration
+
+Java callers can configure eligible joins per heuristic planner:
+
+```java
+QueryPlanner qp = new HeuristicQueryPlanner(mdm,
+        JoinPolicy.only(JoinMethod.HASH));
+```
+
+`JoinMethod` and `JoinPolicy` are in `simpledb.opt`. The existing constructor
+allows all methods in the normal priority: index, hash, merge, then nested
+loops. Mixed policies use `new JoinPolicy(EnumSet.of(...))`. Policies restrict
+join operators while retaining their eligibility checks and all query filters;
+they do not disable index selection or change the heuristic relation order.
+An unavailable connected join fails during planning instead of silently using
+another algorithm or a product. Disconnected products remain supported.
+The planner searches all remaining relations for an eligible next join before
+failing. Diagnostics identify blocked relations and connecting predicates,
+allowed methods, and the partial plan's fields. It does not backtrack earlier
+relation-order choices, so failure describes the current heuristic continuation
+rather than proving every possible join order infeasible.
+There is no SQL or command-line policy selector. A planned hash join may still
+use its existing internal nested-loop fallback for oversized/skewed partitions.
+
+Merge-join scans support repeated `beforeFirst()` calls after partial or full
+consumption, retaining all duplicate matches. Rewind resets the current join
+key; sort bookmarks restore the selected run and its availability flags as
+well as record positions. The regression suite also exercises a nested-loop
+parent repeatedly rewinding a merge-join input.
+
+Index selection and join tracing are silent by default. Enable them with:
+
+```text
+java -Dsimpledb.traceJoins=true -cp bin simpledb.test.SimpleIJ
+```
+
+Trace messages can describe candidate plans considered during optimization;
+use EXPLAIN to inspect the selected physical tree.

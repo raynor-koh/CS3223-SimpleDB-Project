@@ -5,6 +5,7 @@ import simpledb.tx.Transaction;
 import simpledb.parse.*;
 import simpledb.query.*;
 import simpledb.metadata.MetadataMgr;
+import java.sql.Types;
 
 /**
  * The basic planner for SQL update statements.
@@ -37,6 +38,8 @@ public class BasicUpdatePlanner implements UpdatePlanner {
       int count = 0;
       while(us.next()) {
          Constant val = data.newValue().evaluate(us);
+         if (p.schema().type(data.targetField()) == Types.TIME
+               && !val.isTime()) val = Constant.time(val.asString());
          us.setVal(data.targetField(), val);
          count++;
       }
@@ -51,6 +54,8 @@ public class BasicUpdatePlanner implements UpdatePlanner {
       Iterator<Constant> iter = data.vals().iterator();
       for (String fldname : data.fields()) {
          Constant val = iter.next();
+         if (p.schema().type(fldname) == Types.TIME
+               && !val.isTime()) val = Constant.time(val.asString());
          us.setVal(fldname, val);
       }
       us.close();

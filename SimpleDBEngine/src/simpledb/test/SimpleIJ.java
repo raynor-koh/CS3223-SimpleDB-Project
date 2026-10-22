@@ -1,10 +1,12 @@
 package simpledb.test;
 
 import java.sql.Types;
+import java.util.Locale;
 import java.util.Scanner;
 import simpledb.plan.Plan;
 import simpledb.plan.Planner;
 import simpledb.query.Scan;
+import simpledb.query.Constant;
 import simpledb.record.Schema;
 import simpledb.server.SimpleDB;
 import simpledb.tx.Transaction;
@@ -19,9 +21,12 @@ public class SimpleIJ {
       while (sc.hasNextLine()) {
          // process one line of input
          String cmd = sc.nextLine().trim();
-         if (cmd.startsWith("exit"))
+         String keyword = cmd.toLowerCase(Locale.ROOT);
+         if (keyword.startsWith("exit"))
             break;
-         else if (cmd.startsWith("select"))
+         else if (keyword.startsWith("explain"))
+            doExplain(db, planner, cmd);
+         else if (keyword.startsWith("select"))
             doQuery(db, planner, cmd);
          else
             doUpdate(db, planner, cmd);
@@ -45,7 +50,7 @@ public class SimpleIJ {
          for (int i=0; i<numcols; i++) {
             String fldname = sch.fields().get(i);
             int fldtype = sch.type(fldname);
-            int fldlength = (fldtype == Types.INTEGER) ? 6 : sch.length(fldname);
+            int fldlength = displayLength(sch, fldname);
             int width = Math.max(fldname.length(), fldlength) + 1;
             totalwidth += width;
             String fmt = "%" + width + "s";
@@ -61,14 +66,16 @@ public class SimpleIJ {
             for (int i=0; i<numcols; i++) {
                String fldname = sch.fields().get(i);
                int fldtype = sch.type(fldname);
-               int fldlength = (fldtype == Types.INTEGER) ? 6 : sch.length(fldname);
+               int fldlength = displayLength(sch, fldname);
                int width = Math.max(fldname.length(), fldlength) + 1;
                String fmt = "%" + width;
                if (fldtype == Types.INTEGER) {
                   int ival = s.getInt(fldname);
                   System.out.format(fmt + "d", ival);
                }
-               else {
+               else if (fldtype == Types.TIME || fldtype == Types.DECIMAL) {
+                  System.out.format(fmt + "s", s.getVal(fldname).toString());
+               } else {
                   String sval = s.getString(fldname);
                   System.out.format(fmt + "s", sval);
                }
@@ -84,6 +91,26 @@ public class SimpleIJ {
          tx.rollback();
          System.out.println("SQL Exception: " + e.getMessage());
       }
+   }
+
+   private static void doExplain(SimpleDB db, Planner planner, String cmd) {
+      Transaction tx = db.newTx();
+
+      try {
+         System.out.println(planner.explain(cmd, tx));
+         tx.commit();
+      }
+      catch (RuntimeException e) {
+         tx.rollback();
+         System.out.println("SQL Exception: " + e.getMessage());
+      }
+   }
+
+   private static int displayLength(Schema schema, String field) {
+      int type = schema.type(field);
+      if (type == Types.DECIMAL) return Constant.DECIMAL_DISPLAY_SIZE;
+      if (type == Types.TIME) return 15;
+      return type == Types.INTEGER ? 6 : schema.length(field);
    }
 
    private static void doUpdate(SimpleDB db, Planner planner, String cmd) {

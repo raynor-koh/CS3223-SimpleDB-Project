@@ -23,6 +23,7 @@ public class BasicQueryPlanner implements QueryPlanner {
     * projects on the field list, and applies any requested ordering.
     */
    public Plan createPlan(QueryData data, Transaction tx) {
+      new QueryValidator(mdm).validate(data, tx);
       //Step 1: Create a plan for each mentioned table or view.
      List<Plan> plans = new ArrayList<>();
       for (String tblname : data.tables()) {
@@ -43,11 +44,18 @@ public class BasicQueryPlanner implements QueryPlanner {
       
       //Step 3: Add a selection plan for the predicate
       p = new SelectPlan(p, data.pred());
+
+      // Step 4: Group and aggregate before projecting result fields.
+      p = AggregateQueryPlannerSupport.apply(tx, p, data);
       
-      //Step 4: Project on the field names
+      //Step 5: Project on the field names
       p = new ProjectPlan(p, data.fields());
 
-      //Step 5: Sort only when the query has an ORDER BY clause
+      // Step 6: Eliminate duplicate projected rows when requested.
+      if (data.isDistinct())
+         p = new DistinctPlan(tx, p);
+
+      //Step 7: Sort only when the query has an ORDER BY clause
       if (data.hasOrderBy())
          p = new SortPlan(tx, p, data.orderFields(),
                           data.orderDirections());

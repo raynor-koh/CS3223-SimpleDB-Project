@@ -36,6 +36,8 @@ public class IndexUpdatePlanner implements UpdatePlanner {
       Iterator<Constant> valIter = data.vals().iterator();
       for (String fldname : data.fields()) {
          Constant val = valIter.next();
+         if (p.schema().type(fldname) == java.sql.Types.TIME && !val.isTime())
+            val = Constant.time(val.asString());
          s.setVal(fldname, val);
          
          IndexInfo ii = indexes.get(fldname);
@@ -88,6 +90,8 @@ public class IndexUpdatePlanner implements UpdatePlanner {
       while(s.next()) {
          // first, update the record
          Constant newval = data.newValue().evaluate(s);
+         if (p.schema().type(fldname) == java.sql.Types.TIME && !newval.isTime())
+            newval = Constant.time(newval.asString());
          Constant oldval = s.getVal(fldname);
          s.setVal(data.targetField(), newval);
          

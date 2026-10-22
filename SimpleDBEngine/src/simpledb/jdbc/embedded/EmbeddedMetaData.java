@@ -4,6 +4,7 @@ import java.sql.SQLException;
 import static java.sql.Types.INTEGER;
 import simpledb.record.Schema;
 import simpledb.jdbc.ResultSetMetaDataAdapter;
+import simpledb.query.Constant;
 
 /**
  * The embedded implementation of ResultSetMetaData.
@@ -48,6 +49,32 @@ public class EmbeddedMetaData extends ResultSetMetaDataAdapter {
       String fldname = getColumnName(column);
       return sch.type(fldname);
    }
+
+   public String getColumnTypeName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.DECIMAL) return "DECIMAL";
+      if (type == java.sql.Types.TIME) return "TIME";
+      if (type == INTEGER) return "INTEGER";
+      return "VARCHAR";
+   }
+
+   public String getColumnClassName(int column) throws SQLException {
+      int type = getColumnType(column);
+      if (type == java.sql.Types.DECIMAL) return java.math.BigDecimal.class.getName();
+      if (type == java.sql.Types.TIME) return java.time.LocalTime.class.getName();
+      if (type == INTEGER) return Integer.class.getName();
+      return String.class.getName();
+   }
+
+   public int getPrecision(int column) throws SQLException {
+      if (getColumnType(column) == java.sql.Types.DECIMAL) return Constant.DECIMAL_PRECISION;
+      return getColumnType(column) == java.sql.Types.TIME ? 15 : getColumnDisplaySize(column);
+   }
+
+   public int getScale(int column) throws SQLException {
+      if (getColumnType(column) == java.sql.Types.DECIMAL) return Constant.DECIMAL_SCALE;
+      return getColumnType(column) == java.sql.Types.TIME ? 6 : 0;
+   }
    
    /**
     * Returns the number of characters required to display the
@@ -63,7 +90,8 @@ public class EmbeddedMetaData extends ResultSetMetaDataAdapter {
    public int getColumnDisplaySize(int column) throws SQLException {
       String fldname = getColumnName(column);
       int fldtype = sch.type(fldname);
-      int fldlength = (fldtype == INTEGER) ? 6 : sch.length(fldname);
+      int fldlength = fldtype == java.sql.Types.DECIMAL ? Constant.DECIMAL_DISPLAY_SIZE
+            : (fldtype == INTEGER) ? 6 : (fldtype == java.sql.Types.TIME ? 15 : sch.length(fldname));
       return Math.max(fldname.length(), fldlength) + 1;
    }
 }

@@ -1,5 +1,8 @@
 package simpledb.index.planner;
 
+import java.util.Arrays;
+import java.util.List;
+
 import simpledb.record.*;
 import simpledb.query.*;
 import simpledb.metadata.IndexInfo;
@@ -26,6 +29,10 @@ public class IndexJoinPlan implements Plan {
     * @param joinfield the left-hand field used for joining
     */
    public IndexJoinPlan(Plan p1, Plan p2, IndexInfo ii, String joinfield) {
+      int outerType = p1.schema().type(joinfield);
+      if ((outerType == java.sql.Types.TIME || ii.keyType() == java.sql.Types.TIME)
+            && outerType != ii.keyType())
+         throw new IllegalArgumentException("TIME index join keys must have matching types");
       this.p1 = p1;
       this.p2 = p2;
       this.ii = ii;
@@ -87,5 +94,13 @@ public class IndexJoinPlan implements Plan {
     */
    public Schema schema() {
       return sch;
+   }
+
+   public String operationDescription() {
+      return "IndexJoin(outerField=" + joinfield + ")";
+   }
+
+   public List<Plan> children() {
+      return Arrays.asList(p1, p2);
    }
 }

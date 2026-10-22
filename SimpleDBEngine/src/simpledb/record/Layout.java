@@ -79,8 +79,11 @@ public class Layout {
       int fldtype = schema.type(fldname);
       if (fldtype == INTEGER)
          return Integer.BYTES;
-      else // fldtype == VARCHAR
+      else if (fldtype == TIME || fldtype == DECIMAL)
+         return Long.BYTES;
+      else if (fldtype == VARCHAR)
          return Page.maxLength(schema.length(fldname));
+      throw new IllegalArgumentException("Unsupported field type: " + fldtype);
    }
 }
 

@@ -2,6 +2,8 @@ package simpledb.plan;
 
 import simpledb.tx.Transaction;
 import simpledb.metadata.*;
+import java.util.Collections;
+import java.util.List;
 import simpledb.query.Scan;
 import simpledb.record.*;
 
@@ -69,5 +71,13 @@ public class TablePlan implements Plan {
     */
    public Schema schema() {
       return layout.schema();
+   }
+
+   public String operationDescription() {
+      return "TableScan(table=" + tblname + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.emptyList();
    }
 }

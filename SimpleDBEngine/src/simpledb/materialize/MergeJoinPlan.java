@@ -27,6 +27,10 @@ public class MergeJoinPlan implements Plan {
     * @param tx the calling transaction
     */
    public MergeJoinPlan(Transaction tx, Plan p1, Plan p2, String fldname1, String fldname2) {
+      int leftType = p1.schema().type(fldname1);
+      int rightType = p2.schema().type(fldname2);
+      if ((leftType == java.sql.Types.TIME || rightType == java.sql.Types.TIME) && leftType != rightType)
+         throw new IllegalArgumentException("TIME merge join keys must have matching types");
       this.fldname1 = fldname1;
       List<String> sortlist1 = Arrays.asList(fldname1);
       this.p1 = new SortPlan(tx, p1, sortlist1);
@@ -97,6 +101,15 @@ public class MergeJoinPlan implements Plan {
     */
    public Schema schema() {
       return sch;
+   }
+
+   public String operationDescription() {
+      return "MergeJoin(leftField=" + fldname1 + ", rightField="
+            + fldname2 + ")";
+   }
+
+   public List<Plan> children() {
+      return Arrays.asList(p1, p2);
    }
 }
 

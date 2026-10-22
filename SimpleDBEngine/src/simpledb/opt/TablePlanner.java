@@ -1,12 +1,15 @@
 package simpledb.opt;
 
 import java.util.Map;
+import java.util.Collections;
+import java.util.Objects;
 import simpledb.tx.Transaction;
 import simpledb.record.*;
 import simpledb.query.*;
 import simpledb.metadata.*;
 import simpledb.index.planner.*;
 import simpledb.materialize.MergeJoinPlan;
+import simpledb.multibuffer.HashJoinPlan;
 import simpledb.multibuffer.MultibufferProductPlan;
 import simpledb.plan.*;
 
@@ -18,11 +21,13 @@ import simpledb.plan.*;
 class TablePlanner {
     /** Enable with -Dsimpledb.traceJoins=true when manually testing plans. */
     private static final boolean TRACE_JOINS = Boolean.getBoolean("simpledb.traceJoins");
-    private TablePlan myplan;
+    private Plan myplan;
     private Predicate mypred;
     private Schema myschema;
     private Map<String, IndexInfo> indexes;
     private Transaction tx;
+    private final JoinPolicy joinPolicy;
+    private final String tableName;
 
     /**
      * Creates a new table planner.
@@ -36,11 +41,26 @@ class TablePlanner {
      * @param tx      the calling transaction
      */
     public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm) {
-        this.mypred = mypred;
-        this.tx = tx;
-        myplan = new TablePlan(tx, tblname, mdm);
-        myschema = myplan.schema();
+        this(tblname, mypred, tx, mdm, JoinPolicy.defaultPolicy());
+    }
+
+    /** Configures eligible join algorithms without changing their preference order. */
+    public TablePlanner(String tblname, Predicate mypred, Transaction tx, MetadataMgr mdm,
+                        JoinPolicy joinPolicy) {
+        this(tblname, new TablePlan(tx, tblname, mdm), mypred, tx, joinPolicy);
         indexes = mdm.getIndexInfo(tblname, tx);
+    }
+
+    /** A view is a planned relation with no physical indexes of its own. */
+    TablePlanner(String name, Plan input, Predicate predicate, Transaction tx,
+                 JoinPolicy joinPolicy) {
+        this.joinPolicy = Objects.requireNonNull(joinPolicy, "joinPolicy");
+        this.tableName = name;
+        this.mypred = predicate;
+        this.tx = tx;
+        myplan = input;
+        myschema = myplan.schema();
+        indexes = Collections.emptyMap();
     }
 
     /**
@@ -58,10 +78,10 @@ class TablePlanner {
 
     /**
      * Constructs a join plan of the specified plan
-     * and the table. The plan will use an indexjoin, if possible.
+     * and the table. The plan prefers an eligible indexjoin, if allowed.
      * (Which means that if an indexselect is also possible,
      * the indexjoin operator takes precedence.)
-     * The method returns null if no join is possible.
+     * Returns null if no connecting predicate or no allowed algorithm is eligible.
      * 
      * @param current the specified plan
      * @return a join plan of the plan and this table
@@ -75,17 +95,35 @@ class TablePlanner {
             return null;
 
         // Prefer an index join when the new table has a usable index.
-        Plan p = makeIndexJoin(current, currsch);
+        Plan p = null;
+        if (joinPolicy.allows(JoinMethod.INDEX))
+            p = makeIndexJoin(current, currsch);
 
-        // Otherwise, use sort-merge for an equality join.
-        if (p == null)
+        // Otherwise, use a partitioned hash join for an equality join.
+        if (p == null && joinPolicy.allows(JoinMethod.HASH))
+            p = makeHashJoin(current, currsch);
+
+        // With too few available buffers for hash partitioning, retain the
+        // existing sort-merge equality fallback.
+        if (p == null && joinPolicy.allows(JoinMethod.MERGE))
             p = makeMergeJoin(current, currsch);
 
         // Any remaining join predicate uses nested loops.
-        if (p == null)
+        if (p == null && joinPolicy.allows(JoinMethod.NESTED_LOOP))
             p = makeNestedLoopJoin(current, currsch);
 
         return p;
+    }
+
+    /** Distinguishes a disconnected table from an unavailable restricted join. */
+    boolean hasJoinPredicate(Plan current) {
+        return mypred.joinSubPred(myschema, current.schema()) != null;
+    }
+
+    /** Identifies the relation and connecting terms when a policy blocks progress. */
+    String joinDescription(Plan current) {
+        return tableName + " (predicate="
+                + mypred.joinSubPred(myschema, current.schema()) + ")";
     }
 
     /**
@@ -96,30 +134,44 @@ class TablePlanner {
      * @return a product plan of the specified plan and this table
      */
     public Plan makeProductPlan(Plan current) {
+        if (hasJoinPredicate(current))
+            throw new IllegalStateException("Cannot replace a connected join with a product; "
+                    + "allowed join methods: " + joinPolicy.allowedMethods()
+                    + "; blocked relation: " + joinDescription(current));
         Plan p = addSelectPred(myplan);
         trace("cross product");
         return new MultibufferProductPlan(tx, current, p);
     }
 
+    public Schema schema() {
+        return myschema;
+    }
+
     private Plan makeIndexSelect() {
+        if (!(myplan instanceof TablePlan))
+            return null;
         for (String fldname : indexes.keySet()) {
             Constant val = mypred.equatesWithConstant(fldname);
             if (val != null) {
+                if (myschema.type(fldname) == java.sql.Types.TIME && !val.isTime())
+                    val = Constant.time(val.asString());
                 IndexInfo ii = indexes.get(fldname);
-                System.out.println("index on " + fldname + " used");
-                return new IndexSelectPlan(myplan, ii, val);
+                trace("index on " + fldname + " used");
+                return new IndexSelectPlan((TablePlan) myplan, ii, val);
             }
         }
         return null;
     }
 
     private Plan makeIndexJoin(Plan current, Schema currsch) {
+        if (!(myplan instanceof TablePlan))
+            return null;
         for (String fldname : indexes.keySet()) {
             String outerfield = mypred.equatesWithField(fldname);
             if (outerfield != null && currsch.hasField(outerfield)) {
                 IndexInfo ii = indexes.get(fldname);
                 trace("index join: " + outerfield + " = " + fldname);
-                Plan p = new IndexJoinPlan(current, myplan, ii, outerfield);
+                Plan p = new IndexJoinPlan(current, (TablePlan) myplan, ii, outerfield);
                 p = addSelectPred(p);
                 return addJoinPred(p, currsch);
             }
@@ -175,6 +227,26 @@ class TablePlanner {
                  * Rechecking DId = DeptId is harmless and keeps the implementation
                  * correct without needing to remove one term from Predicate.
                  */
+                return addJoinPred(p, currsch);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Constructs a partitioned hash join for an equality predicate connecting
+     * the current left-deep plan to this table. At least three buffers are
+     * required to retain one input buffer and two working buffers.
+     */
+    private Plan makeHashJoin(Plan current, Schema currsch) {
+        if (tx.availableBuffs() < 3)
+            return null;
+        for (String innerField : myschema.fields()) {
+            String outerField = mypred.equatesWithField(innerField);
+            if (outerField != null && currsch.hasField(outerField)) {
+                Plan rhs = addSelectPred(myplan);
+                trace("partitioned hash join: " + outerField + " = " + innerField);
+                Plan p = new HashJoinPlan(tx, current, rhs, outerField, innerField);
                 return addJoinPred(p, currsch);
             }
         }

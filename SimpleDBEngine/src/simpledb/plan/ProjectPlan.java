@@ -1,5 +1,6 @@
 package simpledb.plan;
 
+import java.util.Collections;
 import java.util.List;
 import simpledb.record.Schema;
 import simpledb.query.*;
@@ -68,5 +69,13 @@ public class ProjectPlan implements Plan {
     */
    public Schema schema() {
       return schema;
+   }
+
+   public String operationDescription() {
+      return "Project(fields=" + schema.fields() + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.singletonList(p);
    }
 }

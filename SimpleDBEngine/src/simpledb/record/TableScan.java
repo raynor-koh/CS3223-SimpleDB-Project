@@ -1,6 +1,6 @@
 package simpledb.record;
 
-import static java.sql.Types.INTEGER;
+import static java.sql.Types.*;
 import simpledb.file.BlockId;
 import simpledb.query.*;
 import simpledb.tx.Transaction;
@@ -52,11 +52,18 @@ public class TableScan implements UpdateScan {
       return rp.getString(currentslot, fldname);
    }
 
+   public long getTimeMicros(String fldname) { return rp.getLong(currentslot, fldname); }
+
    public Constant getVal(String fldname) {
       if (layout.schema().type(fldname) == INTEGER)
          return new Constant(getInt(fldname));
-      else
+      if (layout.schema().type(fldname) == TIME)
+         return Constant.fromTimeMicros(getTimeMicros(fldname));
+      if (layout.schema().type(fldname) == DECIMAL)
+         return Constant.fromDecimalUnscaled(rp.getLong(currentslot, fldname));
+      if (layout.schema().type(fldname) == VARCHAR)
          return new Constant(getString(fldname));
+      throw new IllegalArgumentException("Unsupported field type: " + layout.schema().type(fldname));
    }
 
    public boolean hasField(String fldname) {
@@ -78,11 +85,24 @@ public class TableScan implements UpdateScan {
       rp.setString(currentslot, fldname, val);
    }
 
+   public void setTimeMicros(String fldname, long val) {
+      if (layout.schema().type(fldname) != TIME)
+         throw new IllegalArgumentException("Not a TIME field: " + fldname);
+      Constant.fromTimeMicros(val); // Validate before modifying record bytes.
+      rp.setLong(currentslot, fldname, val);
+   }
+
    public void setVal(String fldname, Constant val) {
       if (layout.schema().type(fldname) == INTEGER)
          setInt(fldname, val.asInt());
-      else
+      else if (layout.schema().type(fldname) == TIME)
+         setTimeMicros(fldname, val.asTimeMicros());
+      else if (layout.schema().type(fldname) == DECIMAL)
+         rp.setLong(currentslot, fldname, val.asDecimal().unscaledValue().longValueExact());
+      else if (layout.schema().type(fldname) == VARCHAR)
          setString(fldname, val.asString());
+      else
+         throw new IllegalArgumentException("Unsupported field type: " + layout.schema().type(fldname));
    }
 
    public void insert() {

@@ -48,6 +48,16 @@ public class Predicate {
       return true;
    }
 
+   /** Validate TIME operands and bind their literals before planning. */
+   public void validateTimeTypes(Schema schema) {
+      for (Term term : terms)
+         term.validateTimeTypes(schema);
+   }
+
+   public List<Term> terms() {
+      return Collections.unmodifiableList(terms);
+   }
+
    /** 
     * Calculate the extent to which selecting on the predicate 
     * reduces the number of records output by a query.

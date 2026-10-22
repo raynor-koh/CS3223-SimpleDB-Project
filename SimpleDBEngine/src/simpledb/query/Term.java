@@ -60,6 +60,10 @@ public class Term {
      * @return true if the comparision is valid
      */
     private boolean compare(Constant lhsVal, Constant rhsVal) {
+        if (lhsVal.isTime() && !rhs.isFieldName() && rhsVal.asString() != null)
+            rhsVal = Constant.time(rhsVal.asString());
+        else if (rhsVal.isTime() && !lhs.isFieldName() && lhsVal.asString() != null)
+            lhsVal = Constant.time(lhsVal.asString());
         // Preserve the SQL operand order: a negative result means lhs < rhs.
         // Comparing rhs to lhs instead would reverse the meaning of <, <=, >, and >=.
         int result = lhsVal.compareTo(rhsVal);
@@ -203,7 +207,26 @@ public class Term {
    public boolean appliesTo(Schema sch) {
       return lhs.appliesTo(sch) && rhs.appliesTo(sch);
    }
+
+   public Expression lhs() { return lhs; }
+   public Expression rhs() { return rhs; }
+   public String operator() { return operator; }
    
+   /** Bind quoted TIME literals before physical operators choose their keys. */
+   public void validateTimeTypes(Schema schema) {
+      if (!appliesTo(schema)) return;
+      int leftType = lhs.isFieldName() ? schema.type(lhs.asFieldName()) : lhs.asConstant().type();
+      int rightType = rhs.isFieldName() ? schema.type(rhs.asFieldName()) : rhs.asConstant().type();
+      if (leftType != java.sql.Types.TIME && rightType != java.sql.Types.TIME) return;
+      if (leftType == java.sql.Types.TIME && rightType == java.sql.Types.VARCHAR && !rhs.isFieldName()) {
+         rhs = new Expression(Constant.time(rhs.asConstant().asString()));
+      } else if (rightType == java.sql.Types.TIME && leftType == java.sql.Types.VARCHAR && !lhs.isFieldName()) {
+         lhs = new Expression(Constant.time(lhs.asConstant().asString()));
+      } else if (leftType != rightType) {
+         throw new IllegalArgumentException("TIME comparisons require matching column types or a quoted TIME literal: " + this);
+      }
+   }
+
    public String toString() {
         return lhs.toString() + operator + rhs.toString();
    }

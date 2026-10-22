@@ -4,6 +4,7 @@ import java.util.*;
 import static simpledb.metadata.TableMgr.MAX_NAME;
 import simpledb.tx.Transaction;
 import simpledb.record.*;
+import simpledb.index.Index;
 
 /**
  * The index manager.
@@ -55,6 +56,25 @@ class IndexMgr {
         String fldname, 
         String indexType, 
         Transaction tx) {
+      // Build from live table rows before advertising the index in the catalog.
+      // Keeping this here also covers callers of MetadataMgr.createIndex().
+      Layout tableLayout = tblmgr.getLayout(tblname, tx);
+      StatInfo stats = statmgr.getStatInfo(tblname, tableLayout, tx);
+      IndexInfo info = new IndexInfo(idxname, fldname, tableLayout.schema(), tx,
+            stats, indexType);
+      Index index = info.open();
+      try {
+         TableScan table = new TableScan(tx, tblname, tableLayout);
+         try {
+            while (table.next())
+               index.insert(table.getVal(fldname), table.getRid());
+         } finally {
+            table.close();
+         }
+      } finally {
+         index.close();
+      }
+
       TableScan ts = new TableScan(tx, "idxcat", layout);
       ts.insert();
       ts.setString("indexname", idxname);

@@ -6,11 +6,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 
 import simpledb.index.planner.IndexJoinPlan;
 import simpledb.materialize.MergeJoinPlan;
 import simpledb.metadata.IndexInfo;
+import simpledb.multibuffer.HashJoinPlan;
 import simpledb.multibuffer.MultibufferProductPlan;
 import simpledb.parse.Parser;
 import simpledb.parse.QueryData;
@@ -44,6 +46,7 @@ public class JoinIntegrationTest {
 
       try {
          createTables(planner, tx);
+         testJoinPolicyConfiguration(db, tx);
          testNestedLoopJoin(db, tx);
          testMergeJoin(db, tx);
          testIndexJoin(db, planner, tx);
@@ -57,6 +60,71 @@ public class JoinIntegrationTest {
       }
 
       System.out.println("All " + checksRun + " join integration checks passed.");
+   }
+
+   private static void testJoinPolicyConfiguration(SimpleDB db, Transaction tx)
+         throws ReflectiveOperationException {
+      EnumSet<JoinMethod> methods = EnumSet.of(JoinMethod.HASH);
+      JoinPolicy hash = new JoinPolicy(methods);
+      methods.add(JoinMethod.INDEX);
+      check(hash.allows(JoinMethod.HASH) && !hash.allows(JoinMethod.INDEX),
+            "Policy must copy the caller's mutable collection");
+      try {
+         hash.allowedMethods().clear();
+         check(false, "Policy methods must be unmodifiable");
+      }
+      catch (UnsupportedOperationException expected) {
+         check(hash.allows(JoinMethod.HASH), "Mutation must not change policy");
+      }
+      try {
+         new JoinPolicy(Collections.emptySet());
+         check(false, "An empty policy must be rejected");
+      }
+      catch (IllegalArgumentException expected) {
+         check(true, "Empty policy rejected");
+      }
+      try {
+         new HeuristicQueryPlanner(db.mdMgr(), null);
+         check(false, "A null planner policy must be rejected");
+      }
+      catch (NullPointerException expected) {
+         check(true, "Null policy rejected");
+      }
+      for (JoinMethod method : JoinMethod.values()) {
+         check(JoinPolicy.defaultPolicy().allows(method),
+               "Default policy must allow " + method);
+         check(JoinPolicy.only(method).allowedMethods().equals(EnumSet.of(method)),
+               "Single-method policy must allow only " + method);
+      }
+
+      JoinPolicy merge = JoinPolicy.only(JoinMethod.MERGE);
+      HeuristicQueryPlanner first = new HeuristicQueryPlanner(db.mdMgr(), hash);
+      HeuristicQueryPlanner second = new HeuristicQueryPlanner(db.mdMgr(), merge);
+      Field queryPolicy = HeuristicQueryPlanner.class.getDeclaredField("joinPolicy");
+      queryPolicy.setAccessible(true);
+      check(queryPolicy.get(first) == hash && queryPolicy.get(second) == merge,
+            "Query planners must retain independent per-instance policies");
+      check(queryPolicy.get(new HeuristicQueryPlanner(db.mdMgr()))
+            == JoinPolicy.defaultPolicy(), "Legacy query constructor must use default policy");
+
+      TablePlanner hashTable = new TablePlanner("leftint", new Predicate(), tx, db.mdMgr(), hash);
+      TablePlanner mergeTable = new TablePlanner("leftint", new Predicate(), tx, db.mdMgr(), merge);
+      Field tablePolicy = TablePlanner.class.getDeclaredField("joinPolicy");
+      tablePolicy.setAccessible(true);
+      check(tablePolicy.get(hashTable) == hash && tablePolicy.get(mergeTable) == merge,
+            "Table planners must retain independent per-instance policies");
+      check(tablePolicy.get(new TablePlanner("leftint", new Predicate(), tx, db.mdMgr()))
+            == JoinPolicy.defaultPolicy(), "Legacy table constructor must use default policy");
+
+      // Verify policy propagation through actual plans, independent of how
+      // the planner stores its per-query inputs during recursive view planning.
+      String join = "select lid, rid from leftint, rightint where ikey = jkey";
+      assertCorePlan(first.createPlan(new Parser(join).query(), tx).children().get(0),
+            HashJoinPlan.class, "Hash-only planner must propagate its join policy");
+      assertCorePlan(second.createPlan(new Parser(join).query(), tx).children().get(0),
+            MergeJoinPlan.class, "Merge-only planner must propagate its join policy");
+      check(queryPolicy.get(second) == merge,
+            "Planning with one instance must not change another instance's policy");
    }
 
    private static void createTables(Planner planner, Transaction tx) {
@@ -253,17 +321,17 @@ public class JoinIntegrationTest {
             "Reversed equality operands must still select IndexJoinPlan");
       assertCount(indexReverse, 5, "Reversed index equality should return expected rows");
 
-      Plan merge = planTwoTables(db, tx,
+      Plan hash = planTwoTables(db, tx,
             "select lid, rid from leftint, rightint where ikey = jkey");
-      assertCorePlan(merge, MergeJoinPlan.class,
-            "An unindexed equality join must select MergeJoinPlan");
-      assertPairs(merge, "lid", "rid", "2:10", "2:11", "3:10", "3:11");
+      assertCorePlan(hash, HashJoinPlan.class,
+            "An unindexed equality join must select HashJoinPlan");
+      assertPairs(hash, "lid", "rid", "2:10", "2:11", "3:10", "3:11");
 
       Plan residual = planTwoTables(db, tx,
             "select lid, rid from leftint, rightint "
             + "where ikey = jkey and lgroup = rgroup");
-      assertCorePlan(residual, MergeJoinPlan.class,
-            "Merge join should retain a residual join predicate");
+      assertCorePlan(residual, HashJoinPlan.class,
+            "Hash join should retain a residual join predicate");
       assertPairs(residual, "lid", "rid", "2:10", "3:11");
 
       Plan nested = planTwoTables(db, tx,

@@ -15,6 +15,8 @@ public class SortPlan implements Plan {
    private Plan p;
    private Schema sch;
    private RecordComparator comp;
+   private List<String> sortfields;
+   private List<Boolean> sortdirections;
    
    /**
     * Create a sort plan for the specified query.
@@ -39,7 +41,9 @@ public class SortPlan implements Plan {
       this.tx = tx;
       this.p = p;
       sch = p.schema();
-      comp = new RecordComparator(sortfields, sortdirections);
+      this.sortfields = new ArrayList<String>(sortfields);
+      this.sortdirections = new ArrayList<Boolean>(sortdirections);
+      comp = new RecordComparator(this.sortfields, this.sortdirections);
    }
    
    /**
@@ -97,6 +101,15 @@ public class SortPlan implements Plan {
     */
    public Schema schema() {
       return sch;
+   }
+
+   public String operationDescription() {
+      return "Sort(fields=" + sortfields + ", directions="
+            + directionNames() + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.singletonList(p);
    }
    
    private List<TempTable> splitIntoRuns(Scan src) {
@@ -169,5 +182,12 @@ public class SortPlan implements Plan {
       for (int i = 0; i < count; i++)
          result.add(true);
       return result;
+   }
+
+   private List<String> directionNames() {
+      List<String> names = new ArrayList<String>();
+      for (Boolean ascending : sortdirections)
+         names.add(ascending ? "asc" : "desc");
+      return names;
    }
 }

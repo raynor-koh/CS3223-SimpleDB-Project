@@ -1,6 +1,6 @@
 package simpledb.metadata;
 
-import static java.sql.Types.INTEGER;
+import static java.sql.Types.*;
 
 import java.util.Locale;
 
@@ -87,6 +87,10 @@ public class IndexInfo {
 
       throw new IllegalStateException("Unsupported index type: " + indextype);
    }
+
+   public int keyType() {
+      return tblSchema.type(fldname);
+   }
    
    /**
     * Estimate the number of block accesses required to
@@ -152,10 +156,13 @@ public class IndexInfo {
       sch.addIntField("id");
       if (tblSchema.type(fldname) == INTEGER)
          sch.addIntField("dataval");
-      else {
+      else if (tblSchema.type(fldname) == TIME)
+         sch.addTimeField("dataval");
+      else if (tblSchema.type(fldname) == VARCHAR) {
          int fldlen = tblSchema.length(fldname);
          sch.addStringField("dataval", fldlen);
       }
+      else throw new IllegalArgumentException("Unsupported index key type: " + tblSchema.type(fldname));
       return new Layout(sch);
    }
 

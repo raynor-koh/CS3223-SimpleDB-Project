@@ -1,6 +1,6 @@
 package simpledb.multibuffer;
 
-import static java.sql.Types.INTEGER;
+import static java.sql.Types.*;
 import java.util.*;
 import simpledb.file.BlockId;
 import simpledb.query.*;
@@ -89,14 +89,21 @@ public class ChunkScan implements Scan {
       return rp.getString(currentslot, fldname);
    }
 
+   public long getTimeMicros(String fldname) { return rp.getLong(currentslot, fldname); }
+
    /**
     * @see simpledb.query.Scan#getVal(java.lang.String)
     */
    public Constant getVal(String fldname) {
       if (layout.schema().type(fldname) == INTEGER)
          return new Constant(getInt(fldname));
-      else
+      if (layout.schema().type(fldname) == TIME)
+         return Constant.fromTimeMicros(getTimeMicros(fldname));
+      if (layout.schema().type(fldname) == DECIMAL)
+         return Constant.fromDecimalUnscaled(rp.getLong(currentslot, fldname));
+      if (layout.schema().type(fldname) == VARCHAR)
          return new Constant(getString(fldname));
+      throw new IllegalArgumentException("Unsupported field type: " + layout.schema().type(fldname));
    }
 
   /**

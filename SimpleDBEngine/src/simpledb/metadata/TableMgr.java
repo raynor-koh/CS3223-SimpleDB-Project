@@ -88,6 +88,9 @@ class TableMgr {
          }
       tcat.close();
 
+      if (size < 0)
+         throw new IllegalArgumentException("Table not found: " + tblname);
+
       Schema sch = new Schema();
       Map<String,Integer> offsets = new HashMap<String,Integer>();
       TableScan fcat = new TableScan(tx, "fldcat", fcatLayout);

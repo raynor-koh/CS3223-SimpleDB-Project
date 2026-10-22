@@ -1,5 +1,8 @@
 package simpledb.plan;
 
+import java.util.Collections;
+import java.util.List;
+
 import simpledb.query.Scan;
 import simpledb.record.*;
 
@@ -45,4 +48,20 @@ public interface Plan {
     * @return the query's schema
     */
    public Schema schema();
+
+   /**
+    * Returns a concise, deterministic description of this physical operator.
+    * It is used for plan display and must not open a scan.
+    */
+   public default String operationDescription() {
+      return getClass().getSimpleName();
+   }
+
+   /**
+    * Returns this operator's physical input plans in display order.
+    * It is used for plan display and must not open a scan.
+    */
+   public default List<Plan> children() {
+      return Collections.emptyList();
+   }
 }

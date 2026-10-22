@@ -21,8 +21,16 @@ public class Page {
       return bb.getInt(offset);
    }
 
+   public long getLong(int offset) {
+      return bb.getLong(offset);
+   }
+
    public void setInt(int offset, int n) {
       bb.putInt(offset, n);
+   }
+
+   public void setLong(int offset, long n) {
+      bb.putLong(offset, n);
    }
 
    public byte[] getBytes(int offset) {

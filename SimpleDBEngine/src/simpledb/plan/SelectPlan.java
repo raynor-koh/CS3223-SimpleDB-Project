@@ -1,5 +1,8 @@
 package simpledb.plan;
 
+import java.util.Collections;
+import java.util.List;
+
 import simpledb.query.Predicate;
 import simpledb.query.Scan;
 import simpledb.query.SelectScan;
@@ -20,6 +23,7 @@ public class SelectPlan implements Plan {
     * @param pred the predicate
     */
    public SelectPlan(Plan p, Predicate pred) {
+      pred.validateTimeTypes(p.schema());
       this.p = p;
       this.pred = pred;
    }
@@ -82,5 +86,13 @@ public class SelectPlan implements Plan {
     */
    public Schema schema() {
       return p.schema();
+   }
+
+   public String operationDescription() {
+      return "Select(predicate=" + pred + ")";
+   }
+
+   public List<Plan> children() {
+      return Collections.singletonList(p);
    }
 }

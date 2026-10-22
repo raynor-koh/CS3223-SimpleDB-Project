@@ -4,6 +4,8 @@ import java.util.*;
 import simpledb.tx.Transaction;
 import simpledb.metadata.*;
 import simpledb.parse.*;
+import simpledb.materialize.DistinctPlan;
+import simpledb.materialize.SortPlan;
 
 /**
  * A small improvement on the basic query planner.
@@ -22,6 +24,7 @@ public class BetterQueryPlanner implements QueryPlanner {
     * and finally it projects on the field list. 
     */
    public Plan createPlan(QueryData data, Transaction tx) {
+      new QueryValidator(mdm).validate(data, tx);
       //Step 1: Create a plan for each mentioned table or view.
      List<Plan> plans = new ArrayList<Plan>();
       for (String tblname : data.tables()) {
@@ -49,9 +52,16 @@ public class BetterQueryPlanner implements QueryPlanner {
       
       //Step 3: Add a selection plan for the predicate
       p = new SelectPlan(p, data.pred());
+
+      //Step 4: Group and aggregate before projecting result fields.
+      p = AggregateQueryPlannerSupport.apply(tx, p, data);
       
-      //Step 4: Project on the field names
+      //Step 5: Project on the field names
       p = new ProjectPlan(p, data.fields());
+      if (data.isDistinct())
+         p = new DistinctPlan(tx, p);
+      if (data.hasOrderBy())
+         p = new SortPlan(tx, p, data.orderFields(), data.orderDirections());
       return p;
    }
 }

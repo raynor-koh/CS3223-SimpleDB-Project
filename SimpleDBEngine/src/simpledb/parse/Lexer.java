@@ -10,6 +10,8 @@ import java.io.*;
 public class Lexer {
    private Collection<String> keywords;
    private StreamTokenizer tok;
+   private Queue<Boolean> terminatedStrings;
+   private String clause = "SQL";
    
    /**
     * Creates a new lexical analyzer for SQL statement s.
@@ -17,8 +19,14 @@ public class Lexer {
     */
    public Lexer(String s) {
       initKeywords();
+      terminatedStrings = stringTerminations(s);
       tok = new StreamTokenizer(new StringReader(s));
       tok.ordinaryChar('.');   //disallow "." in identifiers
+      // Retain the exact integer text instead of rounding it through a double.
+      tok.ordinaryChars('0', '9');
+      tok.wordChars('0', '9');
+      tok.ordinaryChar('-');
+      tok.wordChars('-', '-'); //retain hyphens within existing identifiers
       tok.wordChars('_', '_'); //allow "_" in identifiers
       tok.lowerCaseMode(true); //ids and keywords are converted
       nextToken();
@@ -41,7 +49,7 @@ public class Lexer {
     * @return true if the current token is an integer
     */
    public boolean matchIntConstant() {
-      return tok.ttype == StreamTokenizer.TT_NUMBER;
+      return tok.ttype == StreamTokenizer.TT_WORD && tok.sval.matches("-?[0-9]+");
    }
    
    /**
@@ -66,7 +74,26 @@ public class Lexer {
     * @return true if the current token is an identifier
     */
    public boolean matchId() {
-      return  tok.ttype==StreamTokenizer.TT_WORD && !keywords.contains(tok.sval);
+      if (tok.ttype != StreamTokenizer.TT_WORD) return false;
+      char first = tok.sval.charAt(0);
+      return first != '-' && (first < '0' || first > '9') && !keywords.contains(tok.sval);
+   }
+
+   public boolean matchEnd() { return tok.ttype == StreamTokenizer.TT_EOF; }
+
+   /** Adds the parser's current clause to lexical diagnostics. */
+   public void setClause(String clause) { this.clause = clause; }
+
+   public BadSyntaxException syntaxError(String expected) {
+      return new BadSyntaxException(clause + " at line " + tok.lineno()
+            + ": expected " + expected + ", found " + tokenDescription());
+   }
+
+   private String tokenDescription() {
+      if (matchEnd()) return "end of input";
+      if (tok.ttype == StreamTokenizer.TT_WORD) return "'" + tok.sval + "'";
+      if (tok.ttype == '\'' || tok.ttype == '"') return "string literal '" + tok.sval + "'";
+      return "'" + (char) tok.ttype + "'";
    }
    
 //Methods to "eat" the current token
@@ -79,7 +106,7 @@ public class Lexer {
     */
    public void eatDelim(char d) {
       if (!matchDelim(d))
-         throw new BadSyntaxException();
+         throw syntaxError("'" + d + "'");
       nextToken();
    }
 
@@ -137,10 +164,10 @@ public class Lexer {
                 return "!=";
             }
 
-            throw new BadSyntaxException();
+            throw syntaxError("'=' after '!'");
         }
 
-        throw new BadSyntaxException();
+        throw syntaxError("comparison operator (=, <, <=, >, >=, !=, <>)");
     }
    
    /**
@@ -151,9 +178,16 @@ public class Lexer {
     */
    public int eatIntConstant() {
       if (!matchIntConstant())
-         throw new BadSyntaxException();
-      int i = (int) tok.nval;
+         throw syntaxError("integer literal");
+      String literal = tok.sval;
+      int i;
+      try { i = Integer.parseInt(literal); }
+      catch (NumberFormatException e) {
+         throw new BadSyntaxException(clause + ": integer literal out of range: " + literal, e);
+      }
       nextToken();
+      if (matchDelim('.'))
+         throw syntaxError("integer literal without a decimal point");
       return i;
    }
    
@@ -165,7 +199,7 @@ public class Lexer {
     */
    public String eatStringConstant() {
       if (!matchStringConstant())
-         throw new BadSyntaxException();
+         throw syntaxError("quoted string literal");
       String s = tok.sval; //constants are not converted to lower case
       nextToken();
       return s;
@@ -179,7 +213,7 @@ public class Lexer {
     */
    public void eatKeyword(String w) {
       if (!matchKeyword(w))
-         throw new BadSyntaxException();
+         throw syntaxError("keyword '" + w + "'");
       nextToken();
    }
    
@@ -192,7 +226,7 @@ public class Lexer {
     */
    public String eatId() {
       if (!matchId())
-         throw new BadSyntaxException();
+         throw syntaxError("identifier");
       String s = tok.sval;
       nextToken();
       return s;
@@ -201,19 +235,51 @@ public class Lexer {
    private void nextToken() {
       try {
          tok.nextToken();
+         if ((tok.ttype == '\'' || tok.ttype == '"') && !terminatedStrings.remove())
+            throw syntaxError("closing quote for string literal");
       }
       catch(IOException e) {
-         throw new BadSyntaxException();
+         throw new BadSyntaxException(clause + ": could not read SQL input", e);
       }
+   }
+
+   /** StreamTokenizer accepts unclosed quotes; record whether each quote closes.
+    * Match its backslash escapes and its default slash-to-end-of-line comments.
+    */
+   private static Queue<Boolean> stringTerminations(String sql) {
+      Queue<Boolean> result = new ArrayDeque<Boolean>();
+      for (int i = 0; i < sql.length(); i++) {
+         char c = sql.charAt(i);
+         if (c == '/') {
+            while (i < sql.length() && sql.charAt(i) != '\n' && sql.charAt(i) != '\r') i++;
+         } else if (c == '\'' || c == '"') {
+            boolean closed = false;
+            while (++i < sql.length()) {
+               char next = sql.charAt(i);
+               if (next == c) { closed = true; break; }
+               if (next == '\n' || next == '\r') break;
+               if (next == '\\') i++;
+            }
+            result.add(closed);
+            if (!closed) break;
+         }
+      }
+      return result;
    }
    
    private void initKeywords() {
       keywords = Arrays.asList("select", "from", "where", "and",
-                               "insert", "into", "values", "delete", "update", "set", 
+                               "insert", "into", "values", "delete", "update", "set", "time",
                                "create", "table", "int", "varchar", "view", "as", "index", "on",
                                // index related keywords
                                "using", "hash", "btree",
                                // sorting related keywords
-                               "order", "by", "asc", "desc");
+                               "order", "by", "asc", "desc",
+                               // projection related keywords
+                               "distinct",
+                               // plan-display related keywords
+                               "explain",
+                               // grouping and aggregate related keywords
+                               "group", "sum", "count", "avg", "min", "max");
    }
 }
