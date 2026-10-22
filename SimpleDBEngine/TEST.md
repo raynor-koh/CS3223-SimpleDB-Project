@@ -18,17 +18,17 @@ bash scripts/run-baseline.sh
 ```
 
 Both runners compile all Java source files into a fresh temporary directory,
-then execute the same 26 suites with Java assertions enabled (`-ea`). They
+then execute the same 28 suites with Java assertions enabled (`-ea`). They
 isolate working directories and generated databases from the shared `studentdb`,
 retain compiler output and per-suite logs, and print their artifact directory.
 A compilation error or failed suite produces a nonzero exit status.
 
 The latest recorded full run on **22 October 2026**, using OpenJDK/javac
-**25.0.4.1**, compiled **207 Java files** and passed **26 suites / 10,269
+**25.0.4.1**, compiled **208 Java files** and passed **28 suites / 13,690
 reported checks**. The runner's final summary is:
 
 ```text
-Baseline: 26 passed, 0 failed, 26 total.
+Baseline: 28 passed, 0 failed, 28 total.
 ```
 
 This result was obtained with the Bash runner. The PowerShell runner has the
@@ -40,8 +40,9 @@ To run individual suites with the commands below, first compile into `bin`
 as described in [README.md](README.md#manual-compilation). The baseline runner
 uses its own temporary classes directory and does not refresh `bin`.
 
-Interactive lexer/parser examples, `ScanTest3`, and the live network/client
-checks described below are additional checks outside the 26-suite baseline.
+Interactive lexer/parser examples and the live network/client checks
+described below are additional checks outside the 28-suite baseline.
+`ScanTest3` is now included in both runners.
 
 ## Index Backfill and Merge-Join Rewind Regressions
 
@@ -78,8 +79,15 @@ java -ea -cp bin simpledb.index.IndexBackfillIntegrationTest
 Expected final output:
 
 ```text
-All 3170 index-backfill integration checks passed.
+All 5490 index-backfill integration checks passed.
 ```
+
+The suite also inserts 512 unique B+-tree keys and 256 identical keys. It
+checks buffer restoration after every insertion, directory/root growth,
+overflow chains larger than the eight-buffer pool, exact RID retrieval and
+absent keys before and after reopening. These 2,320 extra checks cover the
+formatting-pin leak discovered by the experiment fixture; the new regression
+failed on the first leaf split (24th unique insertion) before the fix.
 
 The SQL fixture loads rows before creating the index, probes the same keys
 before and after creation, then verifies persistence and later mutations. It
@@ -454,15 +462,15 @@ Run:
 java -cp bin simpledb.materialize.AggregateIntegrationTest
 ```
 
-This isolated temporary-database suite covers `SUM`, `COUNT`, truncating
-integer `AVG`, string and integer `MIN`/`MAX`, grouped/global aggregation,
+This isolated temporary-database suite covers `SUM`, `COUNT`, decimal
+`AVG`, string and integer `MIN`/`MAX`, grouped/global aggregation,
 `GROUP BY` without aggregates, `WHERE` before aggregation, ordering by an
 aggregate result, planner validation, empty input, overflow, and scan rewind.
 
 Expected output:
 
 ```text
-All 74 aggregate integration checks passed.
+All 94 aggregate integration checks passed.
 ```
 
 ### Partitioned Hash Join Integration Tests
@@ -669,8 +677,8 @@ actual `IndexJoin` nodes are required. Duplicate dimension keys multiply fact
 rows and aggregate contributions. Scans/indexes close explicitly, and available
 buffers must be restored before commit.
 
-The test preserves the documented integer AVG and zero-row global aggregation
-on empty input. Expected final output:
+The test expects DECIMAL(16,6) AVG results. Empty global queries mixing COUNT
+with other aggregate functions retain the documented no-row policy. Expected final output:
 
 ```text
 All 3590 indexed-update aggregate integration checks passed.
@@ -679,7 +687,7 @@ All 3590 indexed-update aggregate integration checks passed.
 ### Grouping Validation and Aggregate Boundaries
 
 Both baseline runners include `simpledb.test.AggregateSemanticsIntegrationTest`,
-which performs 173 checks through heuristic and basic planners. The parser suite
+which performs 209 checks through heuristic and basic planners. The parser suite
 also rejects ungrouped selected fields when GROUP BY has no aggregate functions.
 Valid grouping-only queries, projections of a subset of grouping fields, and
 ordinary SELECT queries continue to work.
@@ -690,17 +698,39 @@ A sentinel input plan whose `open()` and execution-estimate methods throw
 confirms that shared aggregate validation rejects invalid selections using only
 the input schema, before execution.
 
-AVG tests cover negative and positive fractions, truncation toward zero near
-zero, and same-sign pairs at the 32-bit limits that require a wider accumulator.
-The result type remains integer. Empty physical tables and filters matching no
-rows return zero rows for COUNT(*), COUNT(field), SUM, AVG, MIN, MAX, mixed
-integer/string aggregate lists, and grouped queries. This explicitly preserves
-the current nonstandard empty-global-aggregate policy documented in README.
+AVG tests cover negative and positive fractions, six-place HALF_UP rounding,
+and same-sign pairs at the 32-bit limits. AVG results have DECIMAL type.
+Empty physical tables and filters matching no rows return one zero-count row
+for COUNT-only queries, including multiple counts and DISTINCT/ORDER BY.
+Empty grouped queries and global queries containing other aggregate functions
+retain the documented no-row policy pending SQL NULL support.
 
 Expected final output:
 
 ```text
-All 173 aggregate-semantics integration checks passed.
+All 209 aggregate-semantics integration checks passed.
+```
+
+### Decimal AVG Results
+
+Both baseline runners include `simpledb.test.DecimalAverageIntegrationTest`
+(1,032 checks). It covers DECIMAL(16,6) constants and eight-byte storage,
+positive/negative fractions, repeating decimals, exact HALF_UP ties, 32-bit
+input boundaries, multiple external sort runs, DISTINCT, materialization,
+same-scan rewind, views, and decimal MIN/MAX. Basic, Better, and Heuristic
+planners are exercised; scans must restore their buffers.
+
+Embedded JDBC and network-adapter tests cover BigDecimal/object/string/double
+retrieval, explicit integer conversion, precision/scale metadata, invalid
+arguments, and simulated transport/parsing failures. Network-adapter tests use
+a stub remote result set; the baseline does not require a listening RMI socket.
+
+```bash
+java -ea -cp bin simpledb.test.DecimalAverageIntegrationTest
+```
+
+```text
+All 1032 decimal-average integration checks passed.
 ```
 
 ### Join Strategy Tracing

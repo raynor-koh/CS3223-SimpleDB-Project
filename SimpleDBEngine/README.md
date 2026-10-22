@@ -125,7 +125,7 @@ for example:
 ## Run the automated regression suite
 
 The baseline runners compile the source into a fresh temporary directory and
-run all 26 automated suites without using the shared `studentdb`. From the
+run all 28 automated suites without using the shared `studentdb`. From the
 project directory, use either:
 
 ```powershell
@@ -141,10 +141,14 @@ directory containing compiled classes, compiler output, per-suite logs, and
 isolated databases. They return a nonzero exit status if compilation or a
 suite fails; the temporary artifacts remain available for inspection.
 
-The latest recorded Bash run on 22 October 2026 compiled 207 Java files and
-passed **26 suites / 10,269 checks**, including the populated-table index
-creation and merge-join rewind regressions. The PowerShell suite list matches;
+The latest recorded Bash run on 22 October 2026 compiled 208 Java files and
+passed **28 suites / 13,690 checks**, including populated-table index creation,
+merge-join rewind, B+-tree split resources, empty COUNT, and decimal AVG regressions. The PowerShell suite list matches;
 that runner was not executed in the audit environment.
+
+For synthetic join workloads and reproducible timing collection, see
+[experiments/README.md](experiments/README.md). The harness generates independent
+fixtures, verifies complete result bags, and saves physical plans and raw timings.
 
 See [TEST.md](TEST.md) for individual commands, coverage, and expected results.
 These regression results do not provide the experimental timings required for
@@ -313,16 +317,26 @@ is valid, while `select sname from student group by majorid` is rejected with
 grouping fields is allowed. Ordinary SELECT without grouping or aggregates
 retains its existing behavior.
 
-AVG accepts integer inputs and returns an integer, truncating toward zero:
-the average of -5 and 2 is -1; the average of 5 and -2 is 1. Accumulation uses
-a wider integer so intermediate sums can exceed the 32-bit input range.
+AVG accepts integer inputs and returns a numeric **DECIMAL(16,6)** result,
+rounded to six fractional digits using `HALF_UP`. The average of -5 and 2 is
+`-1.500000`; the average of 5 and -2 is `1.500000`; one third is `0.333333`.
+Accumulation uses `BigDecimal` so intermediate sums do not overflow integers.
+Decimals retain numeric ordering and equality through ORDER BY, DISTINCT,
+views, and temporary materialization. This is an internal computed-result type:
+SQL DECIMAL/DOUBLE column declarations and decimal literals are not added.
+SUM and AVG still require INTEGER input columns. Comparisons require matching
+types, as before; decimal/integer coercion is not implemented.
 
-The current empty-input policy returns **zero rows for global aggregation**,
-including COUNT(*) and COUNT(field). This differs from standard SQL's single
-zero-count row. SUM, AVG, MIN, MAX, and mixed aggregate select lists also
-return no row when there is no input; no NULL values are introduced. Empty
-grouped queries likewise produce no groups. This policy applies both to empty
-tables and filters that match no rows.
+The direct SimpleIJ prints decimal results. Embedded and network JDBC report
+`Types.DECIMAL`, precision 16 and scale 6; use `getBigDecimal()` or
+`getObject(..., BigDecimal.class)` for exact retrieval. `getDouble()` explicitly
+converts to floating point, and `getInt()` explicitly truncates toward zero.
+
+Empty global **COUNT-only** queries return one row containing zero for each
+COUNT(*) or COUNT(field). Empty global queries containing SUM, AVG, MIN, MAX,
+or a mix of COUNT and those functions retain the no-row policy because SQL
+NULL is not supported. Empty grouped queries produce no groups. This applies
+both to empty tables and filters that match no rows.
 
 ## Join-method configuration
 
