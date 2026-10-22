@@ -2,6 +2,7 @@ package simpledb.jdbc.network;
 
 import java.sql.*;
 import simpledb.jdbc.ResultSetMetaDataAdapter;
+import simpledb.query.Constant;
 
 /**
  * An adapter class that wraps RemoteMetaData.
@@ -45,6 +46,7 @@ public class NetworkMetaData extends ResultSetMetaDataAdapter {
 
    public String getColumnTypeName(int column) throws SQLException {
       int type = getColumnType(column);
+      if (type == java.sql.Types.DECIMAL) return "DECIMAL";
       if (type == java.sql.Types.TIME) return "TIME";
       if (type == java.sql.Types.INTEGER) return "INTEGER";
       return "VARCHAR";
@@ -52,16 +54,19 @@ public class NetworkMetaData extends ResultSetMetaDataAdapter {
 
    public String getColumnClassName(int column) throws SQLException {
       int type = getColumnType(column);
+      if (type == java.sql.Types.DECIMAL) return java.math.BigDecimal.class.getName();
       if (type == java.sql.Types.TIME) return java.time.LocalTime.class.getName();
       if (type == java.sql.Types.INTEGER) return Integer.class.getName();
       return String.class.getName();
    }
 
    public int getPrecision(int column) throws SQLException {
+      if (getColumnType(column) == java.sql.Types.DECIMAL) return Constant.DECIMAL_PRECISION;
       return getColumnType(column) == java.sql.Types.TIME ? 15 : getColumnDisplaySize(column);
    }
 
    public int getScale(int column) throws SQLException {
+      if (getColumnType(column) == java.sql.Types.DECIMAL) return Constant.DECIMAL_SCALE;
       return getColumnType(column) == java.sql.Types.TIME ? 6 : 0;
    }
    

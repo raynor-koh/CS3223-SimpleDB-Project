@@ -37,6 +37,11 @@ public class Schema {
       addField(fldname, INTEGER, 0);
    }
 
+   /** Add an internal DECIMAL(16,6) result field; not a SQL column declaration. */
+   public void addDecimalField(String fldname) {
+      addField(fldname, DECIMAL, 0);
+   }
+
    /** Add a SQL TIME field (microseconds since midnight). */
    public void addTimeField(String fldname) {
       addField(fldname, TIME, 0);

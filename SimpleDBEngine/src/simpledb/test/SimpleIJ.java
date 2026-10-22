@@ -6,6 +6,7 @@ import java.util.Scanner;
 import simpledb.plan.Plan;
 import simpledb.plan.Planner;
 import simpledb.query.Scan;
+import simpledb.query.Constant;
 import simpledb.record.Schema;
 import simpledb.server.SimpleDB;
 import simpledb.tx.Transaction;
@@ -49,7 +50,7 @@ public class SimpleIJ {
          for (int i=0; i<numcols; i++) {
             String fldname = sch.fields().get(i);
             int fldtype = sch.type(fldname);
-            int fldlength = (fldtype == Types.INTEGER) ? 6 : (fldtype == Types.TIME ? 15 : sch.length(fldname));
+            int fldlength = displayLength(sch, fldname);
             int width = Math.max(fldname.length(), fldlength) + 1;
             totalwidth += width;
             String fmt = "%" + width + "s";
@@ -65,14 +66,14 @@ public class SimpleIJ {
             for (int i=0; i<numcols; i++) {
                String fldname = sch.fields().get(i);
                int fldtype = sch.type(fldname);
-               int fldlength = (fldtype == Types.INTEGER) ? 6 : (fldtype == Types.TIME ? 15 : sch.length(fldname));
+               int fldlength = displayLength(sch, fldname);
                int width = Math.max(fldname.length(), fldlength) + 1;
                String fmt = "%" + width;
                if (fldtype == Types.INTEGER) {
                   int ival = s.getInt(fldname);
                   System.out.format(fmt + "d", ival);
                }
-               else if (fldtype == Types.TIME) {
+               else if (fldtype == Types.TIME || fldtype == Types.DECIMAL) {
                   System.out.format(fmt + "s", s.getVal(fldname).toString());
                } else {
                   String sval = s.getString(fldname);
@@ -103,6 +104,13 @@ public class SimpleIJ {
          tx.rollback();
          System.out.println("SQL Exception: " + e.getMessage());
       }
+   }
+
+   private static int displayLength(Schema schema, String field) {
+      int type = schema.type(field);
+      if (type == Types.DECIMAL) return Constant.DECIMAL_DISPLAY_SIZE;
+      if (type == Types.TIME) return 15;
+      return type == Types.INTEGER ? 6 : schema.length(field);
    }
 
    private static void doUpdate(SimpleDB db, Planner planner, String cmd) {

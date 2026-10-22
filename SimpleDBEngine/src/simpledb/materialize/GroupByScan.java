@@ -14,6 +14,13 @@ public class GroupByScan implements Scan {
    private List<AggregationFn> aggfns;
    private GroupValue groupval;
    private boolean moregroups;
+   private boolean emptyGroupPending;
+
+   /** Empty grouped input has no groups; global input may have one empty group. */
+   static boolean supportsEmptyGlobalGroup(List<String> groupfields, List<AggregationFn> aggfns) {
+      return groupfields.isEmpty() && !aggfns.isEmpty()
+            && aggfns.stream().allMatch(AggregationFn::supportsEmptyGroup);
+   }
    
    /**
     * Create a groupby scan, given a grouped table scan.
@@ -39,6 +46,7 @@ public class GroupByScan implements Scan {
    public void beforeFirst() {
       s.beforeFirst();
       moregroups = s.next();
+      emptyGroupPending = !moregroups && supportsEmptyGlobalGroup(groupfields, aggfns);
    }
    
    /**
@@ -53,6 +61,12 @@ public class GroupByScan implements Scan {
     * @see simpledb.query.Scan#next()
     */
    public boolean next() {
+      if (emptyGroupPending) {
+         for (AggregationFn fn : aggfns)
+            fn.processEmptyGroup();
+         emptyGroupPending = false;
+         return true;
+      }
       if (!moregroups)
          return false;
       for (AggregationFn fn : aggfns)

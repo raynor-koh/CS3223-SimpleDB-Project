@@ -79,7 +79,7 @@ public class Layout {
       int fldtype = schema.type(fldname);
       if (fldtype == INTEGER)
          return Integer.BYTES;
-      else if (fldtype == TIME)
+      else if (fldtype == TIME || fldtype == DECIMAL)
          return Long.BYTES;
       else if (fldtype == VARCHAR)
          return Page.maxLength(schema.length(fldname));

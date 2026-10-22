@@ -83,9 +83,12 @@ public final class QueryValidator {
       for (SelectItem item : data.selectItems()) {
          String out = item.outputFieldName();
          int type = item.isAggregate()
-               ? (item.aggregate() == SelectItem.Aggregate.COUNT ? INTEGER : combined.type(item.argument()))
+               ? (item.aggregate() == SelectItem.Aggregate.COUNT ? INTEGER
+                     : item.aggregate() == SelectItem.Aggregate.AVG ? java.sql.Types.DECIMAL
+                     : combined.type(item.argument()))
                : combined.type(item.fieldName());
          if (type == INTEGER) output.addIntField(out);
+         else if (type == java.sql.Types.DECIMAL) output.addDecimalField(out);
          else if (type == java.sql.Types.TIME) output.addTimeField(out);
          else output.addStringField(out, combined.length(
                item.isAggregate() ? item.argument() : item.fieldName()));

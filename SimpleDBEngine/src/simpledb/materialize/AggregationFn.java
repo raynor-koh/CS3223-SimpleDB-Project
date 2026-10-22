@@ -23,6 +23,16 @@ public interface AggregationFn {
     * @param s the scan to aggregate over.
     */
    void processNext(Scan s);
+
+   /** Whether this function can represent a group with no input records. */
+   default boolean supportsEmptyGroup() {
+      return false;
+   }
+
+   /** Initialize an empty group without reading a nonexistent input record. */
+   default void processEmptyGroup() {
+      throw new UnsupportedOperationException("Empty group is not supported: " + fieldName());
+   }
    
    /**
     * Return the name of the new aggregation field.
@@ -33,7 +43,7 @@ public interface AggregationFn {
    /**
     * Adds this aggregate's result field to an output schema. Implementations
     * that preserve their argument's type (MIN and MAX) use the input schema;
-    * numeric aggregates add an integer field.
+    * COUNT/SUM add an integer field and AVG adds a decimal field.
     */
    void addFieldTo(Schema outputSchema, Schema inputSchema);
    

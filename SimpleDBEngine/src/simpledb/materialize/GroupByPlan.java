@@ -67,6 +67,8 @@ public class GroupByPlan implements Plan {
     * @see simpledb.plan.Plan#recordsOutput()
     */
    public int recordsOutput() {
+      if (GroupByScan.supportsEmptyGlobalGroup(groupfields, aggfns))
+         return 1;
       if (groupfields.isEmpty())
          return p.recordsOutput() == 0 ? 0 : 1;
       int numgroups = 1;

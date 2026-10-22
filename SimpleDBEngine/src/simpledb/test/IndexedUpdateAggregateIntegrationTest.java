@@ -1,5 +1,7 @@
 package simpledb.test;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -230,7 +232,8 @@ public class IndexedUpdateAggregateIntegrationTest {
 
     private static List<Object> aggregates(List<Integer> amounts) {
         int sum = amounts.stream().mapToInt(Integer::intValue).sum();
-        return Arrays.asList(amounts.size(), sum, sum / amounts.size(),
+        return Arrays.asList(amounts.size(), sum, BigDecimal.valueOf(sum)
+                .divide(BigDecimal.valueOf(amounts.size()), 6, RoundingMode.HALF_UP),
                 Collections.min(amounts), Collections.max(amounts));
     }
 

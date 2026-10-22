@@ -1,6 +1,7 @@
 package simpledb.jdbc.network;
 
 import simpledb.record.Schema;
+import simpledb.query.Constant;
 import static java.sql.Types.INTEGER;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
@@ -73,7 +74,8 @@ public class RemoteMetaDataImpl extends UnicastRemoteObject implements RemoteMet
    public int getColumnDisplaySize(int column) throws RemoteException {
       String fldname = getColumnName(column);
       int fldtype = sch.type(fldname);
-      int fldlength = (fldtype == INTEGER) ? 6 : (fldtype == java.sql.Types.TIME ? 15 : sch.length(fldname));
+      int fldlength = fldtype == java.sql.Types.DECIMAL ? Constant.DECIMAL_DISPLAY_SIZE
+            : (fldtype == INTEGER) ? 6 : (fldtype == java.sql.Types.TIME ? 15 : sch.length(fldname));
       return Math.max(fldname.length(), fldlength) + 1;
    }
 }

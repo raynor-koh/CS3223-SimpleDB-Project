@@ -59,6 +59,8 @@ public class TableScan implements UpdateScan {
          return new Constant(getInt(fldname));
       if (layout.schema().type(fldname) == TIME)
          return Constant.fromTimeMicros(getTimeMicros(fldname));
+      if (layout.schema().type(fldname) == DECIMAL)
+         return Constant.fromDecimalUnscaled(rp.getLong(currentslot, fldname));
       if (layout.schema().type(fldname) == VARCHAR)
          return new Constant(getString(fldname));
       throw new IllegalArgumentException("Unsupported field type: " + layout.schema().type(fldname));
@@ -95,6 +97,8 @@ public class TableScan implements UpdateScan {
          setInt(fldname, val.asInt());
       else if (layout.schema().type(fldname) == TIME)
          setTimeMicros(fldname, val.asTimeMicros());
+      else if (layout.schema().type(fldname) == DECIMAL)
+         rp.setLong(currentslot, fldname, val.asDecimal().unscaledValue().longValueExact());
       else if (layout.schema().type(fldname) == VARCHAR)
          setString(fldname, val.asString());
       else

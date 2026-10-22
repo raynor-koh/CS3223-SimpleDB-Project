@@ -1,6 +1,8 @@
 package simpledb.jdbc.embedded;
 
 import java.sql.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalTime;
 import java.util.Locale;
 import simpledb.record.Schema;
@@ -49,9 +51,13 @@ public class EmbeddedResultSet extends ResultSetAdapter {
     * by returning the corresponding value on the saved scan.
     */
    public int getInt(String fldname) throws SQLException {
+      String name = columnName(fldname);
+      if (sch.type(name) == Types.DECIMAL) {
+         try { return getBigDecimal(name).setScale(0, RoundingMode.DOWN).intValueExact(); }
+         catch (ArithmeticException e) { throw new SQLException("Integer conversion overflow: " + name, e); }
+      }
       try {
-         fldname = fldname.toLowerCase(); // to ensure case-insensitivity
-         return s.getInt(fldname);
+         return s.getInt(name);
       }
       catch(RuntimeException e) {
          conn.rollback();
@@ -64,11 +70,11 @@ public class EmbeddedResultSet extends ResultSetAdapter {
     * by returning the corresponding value on the saved scan.
     */
    public String getString(String fldname) throws SQLException {
+      String name = columnName(fldname);
       try {
-         fldname = fldname.toLowerCase(); // to ensure case-insensitivity
-         if (sch.type(fldname) == java.sql.Types.TIME)
-            return s.getVal(fldname).toString();
-         return s.getString(fldname);
+         if (sch.type(name) == Types.TIME || sch.type(name) == Types.DECIMAL)
+            return s.getVal(name).toString();
+         return s.getString(name);
       }
       catch(RuntimeException e) {
          conn.rollback();
@@ -83,6 +89,37 @@ public class EmbeddedResultSet extends ResultSetAdapter {
       return legacy;
    }
 
+   public int getInt(int index) throws SQLException { return getInt(columnName(index)); }
+
+   public String getString(int index) throws SQLException { return getString(columnName(index)); }
+
+   public BigDecimal getBigDecimal(String label) throws SQLException {
+      String name = columnName(label);
+      int type = sch.type(name);
+      if (type != Types.DECIMAL && type != Types.INTEGER)
+         throw new SQLException("Column is not numeric: " + label);
+      Constant value = columnValue(name);
+      return type == Types.DECIMAL ? value.asDecimal() : BigDecimal.valueOf(value.asInt());
+   }
+
+   public BigDecimal getBigDecimal(int index) throws SQLException {
+      return getBigDecimal(columnName(index));
+   }
+
+   @Deprecated
+   public BigDecimal getBigDecimal(String label, int scale) throws SQLException {
+      return getBigDecimal(label).setScale(scale, RoundingMode.HALF_UP);
+   }
+
+   @Deprecated
+   public BigDecimal getBigDecimal(int index, int scale) throws SQLException {
+      return getBigDecimal(columnName(index), scale);
+   }
+
+   public double getDouble(String label) throws SQLException { return getBigDecimal(label).doubleValue(); }
+
+   public double getDouble(int index) throws SQLException { return getDouble(columnName(index)); }
+
    public Time getTime(int columnIndex) throws SQLException {
       return getTime(columnName(columnIndex));
    }
@@ -92,6 +129,7 @@ public class EmbeddedResultSet extends ResultSetAdapter {
       String name = columnName(columnLabel);
       if (sch.type(name) == java.sql.Types.TIME && type == LocalTime.class)
          return type.cast(columnValue(name).asLocalTime());
+      if (type == BigDecimal.class) return type.cast(getBigDecimal(name));
       if (type == Time.class) return type.cast(getTime(name));
       if (type == String.class) return type.cast(getString(name));
       throw new SQLException("Unsupported typed object request: " + type.getName());
@@ -106,6 +144,7 @@ public class EmbeddedResultSet extends ResultSetAdapter {
       Constant value = columnValue(name);
       if (sch.type(name) == java.sql.Types.TIME) return value.asLocalTime();
       if (sch.type(name) == java.sql.Types.INTEGER) return value.asInt();
+      if (sch.type(name) == Types.DECIMAL) return value.asDecimal();
       return value.asString();
    }
 

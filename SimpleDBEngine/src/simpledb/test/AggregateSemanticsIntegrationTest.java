@@ -3,6 +3,7 @@ package simpledb.test;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Types;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -23,7 +24,7 @@ import simpledb.record.Schema;
 import simpledb.server.SimpleDB;
 import simpledb.tx.Transaction;
 
-/** Planning-time grouping validation and explicit integer/empty aggregate semantics. */
+/** Planning-time grouping validation and explicit decimal/empty aggregate semantics. */
 public class AggregateSemanticsIntegrationTest {
     private static int checks;
 
@@ -38,7 +39,7 @@ public class AggregateSemanticsIntegrationTest {
                     new Planner(new HeuristicQueryPlanner(db.mdMgr()), new IndexUpdatePlanner(db.mdMgr())),
                     new Planner(new BasicQueryPlanner(db.mdMgr()), new IndexUpdatePlanner(db.mdMgr())))) {
                 testPlannerValidation(planner, tx, directory);
-                testIntegerAverage(planner, tx);
+                testDecimalAverage(planner, tx);
                 testEmptyAggregates(planner, tx);
             }
             check(tx.availableBuffs() == SimpleDB.BUFFER_SIZE, "No pins may remain before commit");
@@ -108,24 +109,37 @@ public class AggregateSemanticsIntegrationTest {
                 rows(new Object[] {-5}, new Object[] {2}));
     }
 
-    private static void testIntegerAverage(Planner planner, Transaction tx) {
-        // Negative fractional averages truncate toward zero, not toward -infinity.
-        // Large same-sign pairs also require an accumulator wider than int.
+    private static void testDecimalAverage(Planner planner, Transaction tx) {
+        // Preserve both signs of fractional averages and sums beyond the int range.
         verify(planner, tx, "select grp, avg(score), count(*) from avgcases group by grp order by grp",
-                rows(new Object[] {1, -1, 2}, new Object[] {2, 1, 2}, new Object[] {3, 0, 2},
-                     new Object[] {4, 0, 2}, new Object[] {5, Integer.MAX_VALUE, 2},
-                     new Object[] {6, Integer.MIN_VALUE + 1, 2}));
-        verify(planner, tx, "select avg(score), count(*) from avgcases", rows(new Object[] {0, 12}));
-        verify(planner, tx, "select avg(score) from avgcases where grp = 1", rows(new Object[] {-1}));
-        verify(planner, tx, "select avg(score) from avgcases where grp = 2", rows(new Object[] {1}));
+                rows(new Object[] {1, decimal("-1.500000"), 2}, new Object[] {2, decimal("1.500000"), 2},
+                     new Object[] {3, decimal("-0.500000"), 2}, new Object[] {4, decimal("0.500000"), 2},
+                     new Object[] {5, decimal("2147483647.000000"), 2},
+                     new Object[] {6, decimal("-2147483647.500000"), 2}));
+        verify(planner, tx, "select avg(score), count(*) from avgcases",
+                rows(new Object[] {decimal("-0.083333"), 12}));
+        verify(planner, tx, "select avg(score) from avgcases where grp = 1",
+                rows(new Object[] {decimal("-1.500000")}));
+        verify(planner, tx, "select avg(score) from avgcases where grp = 2",
+                rows(new Object[] {decimal("1.500000")}));
         Plan plan = planner.createQueryPlan("select avg(score) from avgcases", tx);
-        check(plan.schema().type("avgofscore") == Types.INTEGER, "AVG must retain integer output type");
+        check(plan.schema().type("avgofscore") == Types.DECIMAL, "AVG must have decimal output type");
     }
+
+    private static BigDecimal decimal(String value) { return new BigDecimal(value); }
 
     private static void testEmptyAggregates(Planner planner, Transaction tx) {
         String all = "count(*), sum(score), avg(score), min(score), max(score)";
         for (String input : Arrays.asList(" from emptyavg", " from avgcases where grp = 999")) {
-            for (String projection : Arrays.asList("count(*)", "count(score)", "sum(score)",
+            for (String projection : Arrays.asList("count(*)", "count(score)", "count(title)"))
+                verify(planner, tx, "select " + projection + input, rows(new Object[] {0}));
+            verify(planner, tx, "select count(*), count(score), count(title)" + input,
+                    rows(new Object[] {0, 0, 0}));
+            verify(planner, tx, "select distinct count(*)" + input + " order by countofall",
+                    rows(new Object[] {0}));
+            verify(planner, tx, "select grp, count(*)" + input + " group by grp", Collections.emptyList());
+            // Other aggregates still require NULL support to represent an empty group.
+            for (String projection : Arrays.asList("sum(score)",
                     "avg(score)", "min(score)", "max(score)", all,
                     "count(*), min(title), max(title)"))
                 verify(planner, tx, "select " + projection + input, Collections.emptyList());

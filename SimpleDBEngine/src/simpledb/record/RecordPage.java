@@ -92,7 +92,7 @@ public class RecordPage {
             int fldpos = offset(slot) + layout.offset(fldname);
             if (sch.type(fldname) == INTEGER)
                tx.setInt(blk, fldpos, 0, false);
-            else if (sch.type(fldname) == TIME)
+            else if (sch.type(fldname) == TIME || sch.type(fldname) == DECIMAL)
                tx.setLong(blk, fldpos, 0L, false);
             else if (sch.type(fldname) == VARCHAR)
                tx.setString(blk, fldpos, "", false);

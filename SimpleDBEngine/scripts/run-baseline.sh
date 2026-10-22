@@ -56,6 +56,7 @@ tests=(
     simpledb.test.QueryResourceIntegrationTest
     simpledb.test.IndexedUpdateAggregateIntegrationTest
     simpledb.test.AggregateSemanticsIntegrationTest
+    simpledb.test.DecimalAverageIntegrationTest
     simpledb.test.TimeTypeIntegrationTest
     simpledb.test.TimeTypeRegressionTest
     simpledb.multibuffer.HashJoinIntegrationTest

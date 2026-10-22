@@ -40,6 +40,14 @@ public class CountFn implements AggregationFn {
    public void processNext(Scan s) {
       count++;
    }
+
+   public boolean supportsEmptyGroup() {
+      return true;
+   }
+
+   public void processEmptyGroup() {
+      count = 0;
+   }
    
    /**
     * Return the field's name, prepended by "countof".

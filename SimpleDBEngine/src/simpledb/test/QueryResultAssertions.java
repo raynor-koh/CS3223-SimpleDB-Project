@@ -38,8 +38,9 @@ final class QueryResultAssertions {
                 List<Object> tuple = new ArrayList<>();
                 for (String field : fields) {
                     Constant value = scan.getVal(field);
-                    tuple.add(plan.schema().type(field) == INTEGER
-                            ? value.asInt() : value.asString());
+                    tuple.add(plan.schema().type(field) == INTEGER ? value.asInt()
+                            : plan.schema().type(field) == java.sql.Types.DECIMAL
+                            ? value.asDecimal() : value.asString());
                 }
                 rows.add(tuple);
             }

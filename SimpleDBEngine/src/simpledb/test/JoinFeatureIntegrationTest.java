@@ -1,5 +1,7 @@
 package simpledb.test;
 
+import java.math.BigDecimal;
+
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -101,40 +103,40 @@ public class JoinFeatureIntegrationTest {
         // Both A groups join the same three B values [4, 2, 1]. Preserve
         // multiplicity: global count/sum are 6/14, not 3/7.
         verifyFinalQuery(db, tx, policy, method, "select " + aggregates + from, 1,
-                rows(new Object[] {6, 14, 2, 1, 4}));
+                rows(new Object[] {6, 14, decimal("2.333333"), 1, 4}));
         verifyFinalQuery(db, tx, policy, method,
                 "select agrp, " + aggregates + from + " group by agrp", 1,
-                rows(new Object[] {1, 3, 7, 2, 1, 4}, new Object[] {2, 3, 7, 2, 1, 4}));
+                rows(new Object[] {1, 3, 7, decimal("2.333333"), 1, 4}, new Object[] {2, 3, 7, decimal("2.333333"), 1, 4}));
         // Dropping the grouping key leaves two identical complete tuples.
         // DISTINCT must collapse those final tuples, not the aggregate inputs.
         verifyFinalQuery(db, tx, policy, method,
                 "select " + aggregates + from + " group by agrp", 1,
-                rows(new Object[] {3, 7, 2, 1, 4}, new Object[] {3, 7, 2, 1, 4}));
+                rows(new Object[] {3, 7, decimal("2.333333"), 1, 4}, new Object[] {3, 7, decimal("2.333333"), 1, 4}));
         verifyFinalQuery(db, tx, policy, method,
                 "select distinct " + aggregates + from + " group by agrp", 1,
-                rows(new Object[] {3, 7, 2, 1, 4}));
+                rows(new Object[] {3, 7, decimal("2.333333"), 1, 4}));
 
         // Every primary sort key has ties, so the secondary direction matters.
         String grouped = "select aid, bg, " + aggregates + from + " group by aid, bg";
         verifyFinalQuery(db, tx, policy, method, grouped + " order by aid asc, bg desc", 1,
-                rows(new Object[] {1, 2, 1, 2, 2, 2, 2}, new Object[] {1, 1, 2, 5, 2, 1, 4},
-                     new Object[] {2, 2, 1, 2, 2, 2, 2}, new Object[] {2, 1, 2, 5, 2, 1, 4}));
+                rows(new Object[] {1, 2, 1, 2, decimal("2.000000"), 2, 2}, new Object[] {1, 1, 2, 5, decimal("2.500000"), 1, 4},
+                     new Object[] {2, 2, 1, 2, decimal("2.000000"), 2, 2}, new Object[] {2, 1, 2, 5, decimal("2.500000"), 1, 4}));
         verifyFinalQuery(db, tx, policy, method, grouped + " order by aid desc, bg asc", 1,
-                rows(new Object[] {2, 1, 2, 5, 2, 1, 4}, new Object[] {2, 2, 1, 2, 2, 2, 2},
-                     new Object[] {1, 1, 2, 5, 2, 1, 4}, new Object[] {1, 2, 1, 2, 2, 2, 2}));
+                rows(new Object[] {2, 1, 2, 5, decimal("2.500000"), 1, 4}, new Object[] {2, 2, 1, 2, decimal("2.000000"), 2, 2},
+                     new Object[] {1, 1, 2, 5, decimal("2.500000"), 1, 4}, new Object[] {1, 2, 1, 2, decimal("2.000000"), 2, 2}));
         verifyFinalQuery(db, tx, policy, method, grouped
                 + " order by countofall desc, aid asc, bg desc", 1,
-                rows(new Object[] {1, 1, 2, 5, 2, 1, 4}, new Object[] {2, 1, 2, 5, 2, 1, 4},
-                     new Object[] {1, 2, 1, 2, 2, 2, 2}, new Object[] {2, 2, 1, 2, 2, 2, 2}));
+                rows(new Object[] {1, 1, 2, 5, decimal("2.500000"), 1, 4}, new Object[] {2, 1, 2, 5, decimal("2.500000"), 1, 4},
+                     new Object[] {1, 2, 1, 2, decimal("2.000000"), 2, 2}, new Object[] {2, 2, 1, 2, decimal("2.000000"), 2, 2}));
 
         verifyFinalQuery(db, tx, policy, method,
                 "select bg, " + aggregates + from + " group by aid, bg", 1,
-                rows(new Object[] {1, 2, 5, 2, 1, 4}, new Object[] {1, 2, 5, 2, 1, 4},
-                     new Object[] {2, 1, 2, 2, 2, 2}, new Object[] {2, 1, 2, 2, 2, 2}));
+                rows(new Object[] {1, 2, 5, decimal("2.500000"), 1, 4}, new Object[] {1, 2, 5, decimal("2.500000"), 1, 4},
+                     new Object[] {2, 1, 2, decimal("2.000000"), 2, 2}, new Object[] {2, 1, 2, decimal("2.000000"), 2, 2}));
         verifyFinalQuery(db, tx, policy, method,
                 "select distinct bg, " + aggregates + from
                 + " group by aid, bg order by countofall desc, bg asc", 1,
-                rows(new Object[] {1, 2, 5, 2, 1, 4}, new Object[] {2, 1, 2, 2, 2, 2}));
+                rows(new Object[] {1, 2, 5, decimal("2.500000"), 1, 4}, new Object[] {2, 1, 2, decimal("2.000000"), 2, 2}));
 
         verifyFinalQuery(db, tx, policy, method,
                 "select distinct bg, agrp" + from + " order by bg desc, agrp asc", 1,
@@ -148,11 +150,13 @@ public class JoinFeatureIntegrationTest {
                 + " where " + JoinFeatureFixture.FOUR_JOIN;
         String fourAggregates = "count(*), sum(dscore), avg(dscore), min(dscore), max(dscore)";
         verifyFinalQuery(db, tx, policy, method, "select " + fourAggregates + fourFrom, 3,
-                rows(new Object[] {14, 24, 1, 1, 2}));
+                rows(new Object[] {14, 24, decimal("1.714286"), 1, 2}));
         verifyFinalQuery(db, tx, policy, method,
                 "select distinct " + fourAggregates + fourFrom + " group by agrp", 3,
-                rows(new Object[] {7, 12, 1, 1, 2}));
+                rows(new Object[] {7, 12, decimal("1.714286"), 1, 2}));
     }
+
+    private static BigDecimal decimal(String value) { return new BigDecimal(value); }
 
     private static void verifyFinalQuery(SimpleDB db, Transaction tx, JoinPolicy policy,
             JoinMethod method, String sql, int joinCount, List<List<Object>> expected) {

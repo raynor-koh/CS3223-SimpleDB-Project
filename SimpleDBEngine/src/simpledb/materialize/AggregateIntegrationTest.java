@@ -1,9 +1,11 @@
 package simpledb.materialize;
 
 import static java.sql.Types.INTEGER;
+import static java.sql.Types.DECIMAL;
 import static java.sql.Types.VARCHAR;
 
 import java.nio.file.Files;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +35,7 @@ public class AggregateIntegrationTest {
       testSchemaTypes(db, tx);
       testIntegerInputValidation(db, tx);
       testEmptyInput(db, tx);
+      testEmptyCount(db, planner, tx);
       testOverflow(db, planner, tx);
       testSqlPlannerWiring(db, planner, tx);
 
@@ -81,8 +84,8 @@ public class AggregateIntegrationTest {
       Scan scan = plan.open();
       check(scan.next(), "Nonempty global aggregate should emit one row");
       check(scan.getInt("sumofcredits") == 18, "Unexpected global SUM");
-      check(scan.getInt("avgofcredits") == 4,
-            "AVG should use truncating integer division");
+      check(scan.getVal("avgofcredits").asDecimal().equals(new BigDecimal("4.500000")),
+            "AVG should preserve fractional results");
       check(scan.getInt("countofall") == 4, "Unexpected global COUNT(*)");
       check(scan.getString("minofname").equals("amy"), "Unexpected global MIN");
       check(scan.getString("maxofname").equals("zoe"), "Unexpected global MAX");
@@ -104,8 +107,8 @@ public class AggregateIntegrationTest {
             Arrays.asList("dept"), aggregateFns());
       check(plan.schema().type("sumofcredits") == INTEGER,
             "SUM should have integer output type");
-      check(plan.schema().type("avgofcredits") == INTEGER,
-            "AVG should have integer output type");
+      check(plan.schema().type("avgofcredits") == DECIMAL,
+            "AVG should have decimal output type");
       check(plan.schema().type("countofall") == INTEGER,
             "COUNT should have integer output type");
       check(plan.schema().type("minofname") == VARCHAR,
@@ -132,10 +135,52 @@ public class AggregateIntegrationTest {
                   new simpledb.query.Expression(new simpledb.query.Constant(100)))));
       Plan filtered = new GroupByPlan(tx, filteredInput,
             Arrays.<String>asList(), aggregateFns());
-      // The current no-NULL policy emits no global aggregate row for no input.
+      // Mixed aggregates retain the no-row policy until NULL is supported.
       Scan scan = filtered.open();
       check(!scan.next(), "Empty global aggregate should emit no row");
       scan.close();
+   }
+
+   private static void testEmptyCount(SimpleDB db, Planner planner, Transaction tx) {
+      planner.executeUpdate("create table countcases(value int, label varchar(10))", tx);
+      Plan plan = new GroupByPlan(tx, table(db, tx, "countcases"),
+            Arrays.<String>asList(), Arrays.<AggregationFn>asList(
+                  new CountFn(null), new CountFn("value"), new CountFn("label")));
+      check(plan.recordsOutput() == 1, "Empty global COUNT should estimate one row");
+
+      planner.executeUpdate("insert into countcases(value, label) values (1, 'a')", tx);
+      planner.executeUpdate("insert into countcases(value, label) values (2, 'b')", tx);
+      Scan scan = plan.open();
+      try {
+         check(scan.next() && scan.getInt("countofall") == 2,
+               "Initial COUNT should consume both rows");
+         check(!scan.next(), "Nonempty global COUNT should emit exactly one row");
+      }
+      finally {
+         scan.close();
+      }
+
+      planner.executeUpdate("delete from countcases", tx);
+      int before = tx.availableBuffs();
+      // Reuse the plan and its aggregate instances after counting nonempty input.
+      scan = plan.open();
+      try {
+         scan.beforeFirst();
+         for (int pass = 0; pass < 3; pass++) {
+            check(scan.next(), "Empty global COUNT should emit one row after rewind");
+            for (String field : Arrays.asList("countofall", "countofvalue", "countoflabel"))
+               check(scan.getInt(field) == 0, "Empty COUNT must reset prior state: " + field);
+            if (pass != 0) {
+               check(!scan.next(), "Empty global COUNT should emit exactly one row");
+               check(!scan.next(), "Exhausted COUNT must remain exhausted");
+            }
+            scan.beforeFirst();
+         }
+      }
+      finally {
+         scan.close();
+      }
+      check(tx.availableBuffs() == before, "Empty COUNT must restore all buffers");
    }
 
    private static void testOverflow(SimpleDB db, Planner planner, Transaction tx) {
@@ -238,7 +283,8 @@ public class AggregateIntegrationTest {
                                    int count, String min, String max) {
       check(scan.getString("dept").equals(dept), "Unexpected department");
       check(scan.getInt("sumofcredits") == sum, "Unexpected group SUM");
-      check(scan.getInt("avgofcredits") == avg, "Unexpected group AVG");
+      check(scan.getVal("avgofcredits").asDecimal().equals(BigDecimal.valueOf(avg).setScale(6)),
+            "Unexpected group AVG");
       check(scan.getInt("countofall") == count, "Unexpected group COUNT");
       check(scan.getString("minofname").equals(min), "Unexpected group MIN");
       check(scan.getString("maxofname").equals(max), "Unexpected group MAX");

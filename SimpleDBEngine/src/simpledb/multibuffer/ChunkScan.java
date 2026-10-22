@@ -99,6 +99,8 @@ public class ChunkScan implements Scan {
          return new Constant(getInt(fldname));
       if (layout.schema().type(fldname) == TIME)
          return Constant.fromTimeMicros(getTimeMicros(fldname));
+      if (layout.schema().type(fldname) == DECIMAL)
+         return Constant.fromDecimalUnscaled(rp.getLong(currentslot, fldname));
       if (layout.schema().type(fldname) == VARCHAR)
          return new Constant(getString(fldname));
       throw new IllegalArgumentException("Unsupported field type: " + layout.schema().type(fldname));
