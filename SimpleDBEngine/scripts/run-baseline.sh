@@ -38,6 +38,7 @@ fi
 
 tests=(
     simpledb.query.TermTest
+    simpledb.query.ScanTest3
     simpledb.parse.CreateIndexParserTest
     simpledb.parse.OrderByParserTest
     simpledb.parse.AggregateParserTest
